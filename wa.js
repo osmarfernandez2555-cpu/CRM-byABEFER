@@ -74,6 +74,7 @@ class WAManager extends EventEmitter {
     this.groupNames = new Map(); // `${sid}|${jid}` -> asunto del grupo
     this.downloads = new Map();  // descargas de media en curso
     this.skipDownload = new Set();
+    this.botIds = new Set();     // ids de mensajes que mandó ARA
   }
 
   state(id) {
@@ -271,6 +272,7 @@ class WAManager extends EventEmitter {
       file_name: c.fileName || null, seconds: c.seconds || null, ptt: c.ptt || 0,
       status: toNum(m.status ?? 0) || 0,
       raw: JSON.stringify({ key: m.key, message: m.message, messageTimestamp: ts }, BufferJSON.replacer),
+      by_bot: this.botIds.has(key.id) ? 1 : 0,
     };
     const inserted = q.insertMsg.run(row).changes > 0;
 
@@ -341,10 +343,24 @@ class WAManager extends EventEmitter {
     return q.getMsg.get(sid, sent.key.id);
   }
 
-  async sendText(sid, jid, text) {
+  async sendText(sid, jid, text, { byBot } = {}) {
     const sock = this.sockOf(sid);
-    const sent = await sock.sendMessage(jid, { text });
+    const messageId = generateMessageIDV2(sock.user?.id);
+    if (byBot) { this.botIds.add(messageId); setTimeout(() => this.botIds.delete(messageId), 10 * 60 * 1000); }
+    const sent = await sock.sendMessage(jid, { text }, { messageId });
     return this.afterSend(sid, sock, sent);
+  }
+
+  // "Escribiendo..." en el celular del cliente
+  async typing(sid, jid, on) {
+    const s = this.sessions.get(sid);
+    if (s?.status !== 'open') return;
+    try { await s.sock.sendPresenceUpdate(on ? 'composing' : 'paused', jid); } catch {}
+  }
+
+  setText(sid, id, text) {
+    q.setMsgText.run(text, sid, id);
+    this.emit('msgupdate', { sessionId: sid, id, text });
   }
 
   async sendVoice(sid, jid, recorded) {

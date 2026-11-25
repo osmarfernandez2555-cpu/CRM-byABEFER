@@ -6,6 +6,7 @@ Panel web para ver y responder los WhatsApp de varios celulares desde un solo lu
 - Ves todos los chats juntos o filtrados por celular, con no leídos y búsqueda.
 - Respondés con texto, fotos, videos, documentos y **notas de voz grabadas desde el navegador**.
 - Los audios se escuchan con velocidad **1× / 1.5× / 2×** (queda recordada) y se encadenan como en WhatsApp.
+- **ARA**, la vendedora estrella de Tutu: un bot de IA que responde los chats, asesora, toma consignaciones y ventas, y agenda citas en el Polo 52.
 - Todo en tiempo real (Socket.IO). Los datos quedan en una base SQLite dentro de un volumen.
 
 ## Archivos
@@ -14,6 +15,7 @@ Panel web para ver y responder los WhatsApp de varios celulares desde un solo lu
 - `wa.js`: conexión de los celulares con WhatsApp (Baileys), guardado de mensajes y envíos
 - `db.js`: base de datos SQLite
 - `media.js`: conversión de audio con ffmpeg (incluido, no hay que instalar nada)
+- `ara.js`: ARA (IA con Claude, herramientas para agendar citas, guardar clientes y pasar a un asesor)
 - `public/index.html`: el dashboard
 
 ## Variables de entorno
@@ -21,6 +23,8 @@ Panel web para ver y responder los WhatsApp de varios celulares desde un solo lu
 - `PANEL_PASSWORD`: contraseña para entrar al panel (**obligatoria**)
 - `DATA_DIR`: carpeta donde se guardan sesiones, base y archivos. En Railway: `/data`
 - `SESSION_SECRET` (opcional): cualquier texto largo; si lo cambiás, se cierra la sesión del panel
+- `ANTHROPIC_API_KEY`: clave de la API de Claude, la necesita ARA para responder
+- `OPENAI_API_KEY` (opcional): para que ARA entienda los audios (se transcriben y se ven en el panel)
 - `WA_LOG_LEVEL` (opcional): `warn` por defecto; `debug` para ver todo
 
 ## Probar en la PC
@@ -40,3 +44,19 @@ Abrí http://localhost:3000
 4. En el servicio → clic derecho / **Attach Volume** → mount path: `/data`. (Sin volumen, cada deploy borra los celulares vinculados.)
 5. **Settings → Networking → Generate Domain**.
 6. Entrá al dominio, poné la contraseña y conectá el primer celular con el **+**.
+
+## ARA (bot de ventas)
+
+Botón **ARA** en la barra izquierda:
+
+- **General**: prender/apagar, modo prueba (solo responde a los números que pongas), en qué celulares trabaja, horario de citas.
+- **Entrenamiento**: personalidad, forma de vender y todo lo que sabe (stock, financiación, consignación, promos). Nunca inventa lo que no esté en Conocimiento.
+- **Probar a ARA**: simulador para chatear con ella sin WhatsApp (no guarda nada).
+- **Citas** y **Clientes**: lo que ARA agenda y los datos que va juntando.
+
+Reglas automáticas:
+
+- Si una persona escribe en un chat (desde el panel o el celular), ARA se calla en ese chat por las horas configuradas.
+- Si el cliente pide un asesor o hay un reclamo, ARA lo deriva, se calla y avisa en el panel (🙋).
+- En cada chat, el botón de arriba a la derecha pausa o reactiva a ARA.
+- Nunca responde en grupos.

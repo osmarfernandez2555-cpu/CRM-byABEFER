@@ -9,6 +9,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { q, DATA_DIR } from './db.js';
 import wa from './wa.js';
+import ara, { getSettings, saveSettings, DEFAULT_INSTRUCTIONS, DEFAULT_KNOWLEDGE } from './ara.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -103,6 +104,30 @@ app.get('/media/:sid/:id', guard, wrap(async (req, res) => {
   res.sendFile(path.join(DATA_DIR, 'media', row.media_file), { maxAge: '7d' });
 }));
 
+// ---------- ARA (bot de IA) ----------
+app.get('/api/ara/settings', guard, (req, res) => res.json({
+  ...getSettings(),
+  status: { anthropic: !!process.env.ANTHROPIC_API_KEY, openai: !!process.env.OPENAI_API_KEY },
+  defaults: { instructions: DEFAULT_INSTRUCTIONS, knowledge: DEFAULT_KNOWLEDGE },
+}));
+app.put('/api/ara/settings', guard, wrap(async (req, res) => {
+  const st = saveSettings(req.body || {});
+  io.emit('arasettings', { enabled: st.enabled });
+  res.json(st);
+}));
+app.post('/api/ara/test', guard, wrap(async (req, res) => res.json(await ara.simulate(req.body?.conversation))));
+app.post('/api/ara/chat', guard, wrap(async (req, res) => res.json(ara.setChat(req.body.session, req.body.jid, req.body.action))));
+app.get('/api/ara/chat', guard, (req, res) => res.json(q.getBot.get(req.query.session, req.query.jid) || { paused_until: 0, needs_human: 0 }));
+app.get('/api/ara/citas', guard, (req, res) => res.json(q.listCitas.all()));
+app.patch('/api/ara/citas/:id', guard, wrap(async (req, res) => {
+  const estados = ['pendiente', 'confirmada', 'asistio', 'no_vino', 'cancelada'];
+  if (!estados.includes(req.body?.estado)) throw new Error('Estado inválido');
+  q.setCitaEstado.run(req.body.estado, req.params.id);
+  io.emit('citas', {});
+  res.json(q.getCita.get(req.params.id));
+}));
+app.get('/api/ara/leads', guard, (req, res) => res.json(q.listLeads.all()));
+
 app.get('/health', (req, res) => res.json({ ok: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -111,12 +136,17 @@ io.use((socket, next) => {
   const cookies = Object.fromEntries((socket.handshake.headers.cookie || '').split(';').map(c => c.trim().split('=').map(decodeURIComponent)));
   cookies.crm_token === TOKEN ? next() : next(new Error('No autorizado'));
 });
-for (const ev of ['session', 'message', 'media', 'status', 'refresh', 'removed']) {
+for (const ev of ['session', 'message', 'media', 'status', 'refresh', 'removed', 'msgupdate']) {
   wa.on(ev, (data) => io.emit(ev, data));
 }
+for (const ev of ['bot', 'cita', 'citas', 'lead', 'actions', 'araerror']) {
+  ara.on(ev, (data) => io.emit(ev, data));
+}
+wa.on('message', (data) => { try { ara.onMessage(data); } catch (e) { console.error('ARA onMessage', e); } });
 
 server.listen(PORT, () => {
   console.log(`CRM WhatsApp en http://localhost:${PORT}  (datos en ${DATA_DIR})`);
+  if (!process.env.ANTHROPIC_API_KEY) console.warn('ℹ️  ARA necesita ANTHROPIC_API_KEY para responder');
   if (!process.env.PANEL_PASSWORD) console.warn('⚠️  Falta PANEL_PASSWORD: se usa la contraseña por defecto "cambiar123"');
   wa.startAll();
 });

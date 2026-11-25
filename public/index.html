@@ -164,6 +164,48 @@ input,textarea{font:inherit;color:inherit}
 #lightbox img{max-width:94vw;max-height:92vh;border-radius:6px}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1d252c;color:#fff;padding:10px 18px;border-radius:10px;z-index:70;box-shadow:var(--shadow);font-size:13.5px}
 
+
+/* ---------- ARA ---------- */
+.rail-btn.ara{font-size:13px;letter-spacing:.5px}
+.rail-btn.ara.on{background:#5b3fd6;color:#fff}
+.box.wide{width:min(1000px,100%)}
+.tabs{display:flex;gap:6px;padding:0 20px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{padding:12px 12px;color:var(--muted);font-weight:600;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:#5b3fd6;border-color:#5b3fd6}
+.pane{padding:18px 20px;display:grid;gap:14px}
+.field{display:grid;gap:6px}
+.field>span{font-weight:600;font-size:13px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.switch{display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;background:#f5f3ff;border:1px solid #e4dcff}
+.switch input{width:46px;height:26px;appearance:none;background:#cfd6dd;border-radius:999px;position:relative;cursor:pointer;flex:none;transition:.2s}
+.switch input::after{content:"";position:absolute;width:20px;height:20px;border-radius:50%;background:#fff;top:3px;left:3px;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.switch input:checked{background:#5b3fd6}
+.switch input:checked::after{left:23px}
+.ok{color:var(--green-d);font-weight:600}.bad{color:var(--red);font-weight:600}
+textarea.big{min-height:300px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical}
+.hrow{display:grid;grid-template-columns:90px 1fr;gap:8px;align-items:center}
+.checks{display:flex;flex-wrap:wrap;gap:8px}
+.checks label{display:flex;gap:6px;align-items:center;background:#f1f4f6;padding:6px 10px;border-radius:8px;cursor:pointer}
+.savebar{display:flex;gap:10px;justify-content:flex-end;align-items:center;position:sticky;bottom:0;background:#fff;padding:12px 20px;border-top:1px solid var(--line)}
+.sim{display:grid;grid-template-rows:1fr auto;height:min(520px,60vh);border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--chatbg)}
+.sim-msgs{overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:4px}
+.sim-in{display:flex;gap:8px;padding:10px;background:#f0f2f5}
+.act{align-self:center;font-size:12px;background:#f5f3ff;color:#4a33b8;border:1px solid #e4dcff;border-radius:8px;padding:5px 10px;max-width:90%;white-space:pre-wrap}
+.act.err{background:#fdecea;color:var(--red);border-color:#f8cfcb}
+.card{border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:6px}
+.card .top{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.card .kv{font-size:13px;color:var(--muted)}
+.card .kv b{color:var(--text);font-weight:600}
+select.inp{padding:8px 10px}
+.pill{font-size:12.5px;font-weight:700;padding:7px 12px;border-radius:999px;white-space:nowrap;flex:none}
+.pill.active{background:#ede8ff;color:#4a33b8}
+.pill.paused{background:#fff4d6;color:#9a6b00}
+.pill.human{background:#fdecea;color:var(--red)}
+.pill.off{background:#f1f4f6;color:var(--muted)}
+.tag.human{background:#fdecea;color:var(--red);font-weight:700}
+.bot-tag{font-size:10.5px;font-weight:700;color:#5b3fd6;margin-right:2px}
+.transcript{font-size:12.5px;color:#46525c;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(0,0,0,.12);white-space:pre-wrap}
+
 /* ---------- Celular ---------- */
 @media (max-width:860px){
   #app{grid-template-columns:58px 1fr}
@@ -195,6 +237,7 @@ input,textarea{font:inherit;color:inherit}
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4z"/></symbol>
   <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 2h8l6 6v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm7 1.5V9h5.5L13 3.5z"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><path d="M11 2h2v2h4a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-3l-2 3-2-3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h4V2zM8.5 9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM8 14v1.5h8V14H8z"/></symbol>
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2z"/></symbol>
 </svg>
 
@@ -238,6 +281,7 @@ input,textarea{font:inherit;color:inherit}
         <button class="c-btn" id="back"><svg class="icon"><use href="#i-back"/></svg></button>
         <div class="av" id="cAv"></div>
         <div class="t"><b id="cName"></b><span id="cSub"></span></div>
+        <button class="pill off" id="araPill" title="ARA en este chat">🤖 ARA</button>
       </div>
       <div id="msgs"></div>
       <div class="composer" id="composer">
@@ -278,6 +322,62 @@ input,textarea{font:inherit;color:inherit}
       <button class="btn">Abrir chat</button>
     </div>
   </form>
+</div>
+
+
+<!-- MODAL ARA -->
+<div class="modal hidden" id="araModal">
+  <div class="box wide">
+    <div class="box-head"><h3>🤖 ARA · vendedora estrella de Tutu</h3><button class="c-btn" data-close><svg class="icon"><use href="#i-x"/></svg></button></div>
+    <div class="tabs">
+      <button class="tab on" data-tab="general">General</button>
+      <button class="tab" data-tab="train">Entrenamiento</button>
+      <button class="tab" data-tab="sim">Probar a ARA</button>
+      <button class="tab" data-tab="citas">Citas</button>
+      <button class="tab" data-tab="leads">Clientes</button>
+    </div>
+
+    <div class="pane" data-pane="general">
+      <label class="switch"><input type="checkbox" id="araEnabled"><div><b>ARA responde los WhatsApp</b><div class="small" id="araKeyStatus"></div></div></label>
+      <div class="field"><span>Modo prueba: responder solo a estos números</span>
+        <input class="inp" id="araTest" placeholder="Ej: 3704415138, 3515551234 — vacío = responde a todos">
+        <div class="small">Recomendado para empezar: poné tu número y probá escribiéndole al celular conectado desde otro teléfono.</div></div>
+      <div class="field"><span>Celulares donde trabaja ARA</span><div class="checks" id="araSessions"></div><div class="small">Si no marcás ninguno, trabaja en todos.</div></div>
+      <div class="grid2">
+        <label class="field"><span>Si responde una persona, ARA se calla (horas)</span><input class="inp" type="number" min="0" id="araPause"></label>
+        <label class="field"><span>Espera antes de responder (segundos)</span><input class="inp" type="number" min="2" max="60" id="araDelay"></label>
+        <label class="field"><span>Modelo de IA</span><select class="inp" id="araModel">
+          <option value="claude-sonnet-5-5">Claude Sonnet 5.5 — recomendado</option>
+          <option value="claude-haiku-5-5">Claude Haiku 5.5 — más barato y rápido</option>
+          <option value="claude-opus-5-5">Claude Opus 5.5 — máxima calidad</option>
+        </select></label>
+        <label class="field"><span>Máximo de citas en el mismo horario</span><input class="inp" type="number" min="1" id="araSlot"></label>
+      </div>
+      <div class="field"><span>Horario de atención para citas (vacío = cerrado)</span><div class="grid2" id="araHorarios"></div></div>
+    </div>
+
+    <div class="pane hidden" data-pane="train">
+      <div class="small">Así "entrenás" a ARA: todo lo que escribas acá es lo que sabe y cómo se comporta. Completá los <b>[COMPLETAR]</b> con datos reales; ARA nunca inventa precios ni stock que no estén en Conocimiento.</div>
+      <div class="field"><span>Personalidad e instrucciones de venta <button class="btn sm ghost" data-reset="instructions">Restaurar ejemplo</button></span><textarea class="inp big" id="araInstr"></textarea></div>
+      <div class="field"><span>Conocimiento: empresa, stock, financiación, consignación, promos <button class="btn sm ghost" data-reset="knowledge">Restaurar ejemplo</button></span><textarea class="inp big" id="araKnow"></textarea></div>
+    </div>
+
+    <div class="pane hidden" data-pane="sim">
+      <div class="small">Escribí como si fueras un cliente. ARA responde con el entrenamiento actual (se guarda antes de cada prueba). En el simulador las citas y datos <b>no se guardan</b>.</div>
+      <div class="sim"><div class="sim-msgs" id="simMsgs"></div>
+        <form class="sim-in" id="simForm"><input class="inp" id="simText" placeholder="Ej: Hola, quiero dejar mi Gol 2015 en consignación" autocomplete="off"><button class="btn">Enviar</button><button type="button" class="btn ghost" id="simReset">Reiniciar</button></form>
+      </div>
+    </div>
+
+    <div class="pane hidden" data-pane="citas">
+      <div class="filters"><button class="chip on" data-cf="next">Próximas</button><button class="chip" data-cf="all">Todas</button></div>
+      <div id="citasList" style="display:grid;gap:10px"></div>
+    </div>
+
+    <div class="pane hidden" data-pane="leads"><div id="leadsList" style="display:grid;gap:10px"></div></div>
+
+    <div class="savebar" id="araSavebar"><span class="small" id="araSaved"></span><button class="btn" id="araSave" style="background:#5b3fd6">Guardar</button></div>
+  </div>
 </div>
 
 <div id="lightbox" class="hidden"><img alt=""></div>
@@ -327,7 +427,7 @@ async function api(url, opts = {}) {
 const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
 
 // ================== Estado ==================
-const S = { sessions: [], current: 'all', chats: [], filter: 'all', search: '', active: null, msgs: [], loadingOlder: false, noMore: false, speed: store.get('speed', 1), showQrFor: null };
+const S = { sessions: [], current: 'all', chats: [], filter: 'all', search: '', active: null, msgs: [], loadingOlder: false, noMore: false, speed: store.get('speed', 1), showQrFor: null, ara: { enabled: false } };
 let socket;
 
 // ================== Login ==================
@@ -346,6 +446,7 @@ async function init() {
 async function boot() {
   $('#app').classList.remove('hidden');
   S.sessions = await api('/api/sessions');
+  try { S.ara = await api('/api/ara/settings'); } catch {}
   renderRail();
   await loadChats();
   connectSocket();
@@ -380,6 +481,27 @@ function connectSocket() {
     const m = S.msgs.find(x => x.session_id === sessionId && x.id === id);
     if (m && !m.media_file) { m.media_file = media_file; m.media_mime = media_mime; }
   });
+  socket.on('msgupdate', ({ sessionId, id, text }) => {
+    const m = S.msgs.find(x => x.session_id === sessionId && x.id === id);
+    if (!m) return; m.text = text;
+    const el = document.querySelector(`[data-mid="${CSS.escape(id)}"]`);
+    if (el && m.type === 'audio' && !el.querySelector('.transcript')) el.querySelector('.player').insertAdjacentHTML('afterend', `<div class="transcript">📝 ${esc(text)}</div>`);
+  });
+  socket.on('bot', (b) => {
+    for (const c of S.chats) if (c.session_id === b.session_id && c.jid === b.jid) Object.assign(c, { paused_until: b.paused_until, needs_human: b.needs_human });
+    if (S.active && S.active.session_id === b.session_id && S.active.jid === b.jid) { Object.assign(S.active, { paused_until: b.paused_until, needs_human: b.needs_human }); renderPill(); }
+    if (b.alerta) { toast(`🙋 ${b.nombre || b.telefono} pidió hablar con un asesor`); try { if (Notification.permission === 'granted') new Notification('Cliente pide asesor', { body: (b.nombre || b.telefono) + ' — ' + (b.reason || '') }); } catch {} }
+    renderChats();
+  });
+  socket.on('cita', (c) => {
+    toast(`📅 ARA agendó una cita: ${c.nombre || ''} — ${fmtFecha(c.fecha)} ${c.hora}`);
+    try { if (Notification.permission === 'granted') new Notification('Nueva cita agendada por ARA', { body: `${c.nombre || ''} · ${fmtFecha(c.fecha)} ${c.hora} · ${c.motivo}` }); } catch {}
+    if (araTab === 'citas') loadCitas();
+  });
+  socket.on('citas', () => { if (araTab === 'citas') loadCitas(); });
+  socket.on('lead', () => { if (araTab === 'leads') loadLeads(); });
+  socket.on('araerror', (e) => toast('⚠️ ARA no pudo responder: ' + e.error));
+  socket.on('arasettings', (st) => { S.ara.enabled = st.enabled; renderRail(); renderPill(); });
   socket.on('status', ({ sessionId, id, status }) => {
     const m = S.msgs.find(x => x.session_id === sessionId && x.id === id);
     if (m) { m.status = Math.max(m.status || 0, status); const el = document.querySelector(`[data-mid="${CSS.escape(id)}"] .ticks`); if (el) el.outerHTML = ticks(m); }
@@ -407,12 +529,14 @@ function renderRail() {
       </button>`).join('')}
     <button class="rail-btn" id="railAdd" title="Conectar celular">${icon('plus')}</button>
     <div class="rail-bottom">
+      <button class="rail-btn ara ${S.ara.enabled ? 'on' : ''}" id="railAra" title="ARA (bot de IA)">ARA<span class="dot ${S.ara.enabled ? 'open' : ''}"></span></button>
       <button class="rail-btn" id="railGear" title="Celulares">${icon('phone')}</button>
       <button class="rail-btn" id="railOut" title="Salir">${icon('out')}</button>
     </div>`;
   $('#rail').querySelectorAll('[data-s]').forEach(b => b.onclick = () => { S.current = b.dataset.s; renderRail(); loadChats(); });
   $('#railAdd').onclick = () => { openSessModal(); $('#addName').focus(); };
   $('#railGear').onclick = openSessModal;
+  $('#railAra').onclick = () => openAra();
   $('#railOut').onclick = async () => { await api('/api/logout', { method: 'POST' }); location.reload(); };
   const cur = S.sessions.find(s => s.id === S.current);
   $('#listTitle').textContent = cur ? cur.name : 'Todos los chats';
@@ -445,6 +569,7 @@ function renderChats() {
         <div class="row"><span class="chat-name">${esc(name)}</span><span class="chat-time ${c.unread ? 'unread' : ''}">${c.last_ts ? fmtTime(c.last_ts, true) : ''}</span></div>
         <div class="row" style="margin-top:3px">
           <span class="chat-prev">${c.last_from_me ? '✓ ' : ''}${esc(c.last_preview || '')}</span>
+          ${c.needs_human ? '<span class="tag human">🙋 Asesor</span>' : ''}
           ${multi ? `<span class="tag">${esc(c.session_name || '')}</span>` : ''}
           ${c.unread ? `<span class="badge">${c.unread}</span>` : ''}
         </div>
@@ -470,6 +595,8 @@ async function openChat(sid, jid) {
   $('#cName').textContent = name;
   const sess = S.sessions.find(s => s.id === sid);
   $('#cSub').textContent = (jid.endsWith('@g.us') ? 'Grupo' : fmtPhone(jid)) + ' · vía ' + (sess?.name || '') + (sess && sess.status !== 'open' ? ' (desconectado)' : '');
+  if (chat.paused_until === undefined) api(`/api/ara/chat?session=${sid}&jid=${encodeURIComponent(jid)}`).then(b => { Object.assign(chat, { paused_until: b.paused_until, needs_human: b.needs_human }); renderPill(); }).catch(() => {});
+  renderPill();
   $('#msgs').innerHTML = '<div class="load-more">Cargando…</div>';
   const msgs = await api(`/api/messages?session=${sid}&jid=${encodeURIComponent(jid)}`);
   if (S.active !== chat) return;
@@ -540,7 +667,7 @@ function msgHtml(m) {
     case 'image': body = `<img class="media" loading="lazy" src="${mediaUrl(m)}" alt="Foto">` + cap; break;
     case 'sticker': body = `<img class="media sticker" loading="lazy" src="${mediaUrl(m)}" alt="Sticker">`; break;
     case 'video': body = `<video controls preload="none" src="${mediaUrl(m)}"></video>` + cap; break;
-    case 'audio': body = playerHtml(m); break;
+    case 'audio': body = playerHtml(m) + (m.text ? `<div class="transcript">📝 ${esc(m.text)}</div>` : ''); break;
     case 'document': body = `<a class="doc" href="${mediaUrl(m)}?dl=1" target="_blank">${icon('doc')}<span>${esc(m.file_name || 'Documento')}</span>⬇</a>` + cap; break;
     case 'location': body = `<div class="txt">📍 ${linkify(m.text)}</div>`; break;
     case 'contact': body = `<div class="txt">👤 ${esc(m.text)}</div>`; break;
@@ -548,7 +675,7 @@ function msgHtml(m) {
   }
   return `<div class="msg ${m.from_me ? 'out' : 'in'}" data-mid="${esc(m.id)}">
     ${m.sender_name && !m.from_me ? `<div class="who" style="color:${colorOf(m.sender_name)}">${esc(m.sender_name)}</div>` : ''}
-    ${body}<div class="meta">${fmtTime(m.ts)} ${ticks(m)}</div></div>`;
+    ${body}<div class="meta">${m.by_bot ? '<span class="bot-tag">🤖 ARA</span>' : ''}${fmtTime(m.ts)} ${ticks(m)}</div></div>`;
 }
 function bindMsgs(root) {
   root.querySelectorAll('img.media:not(.sticker)').forEach(img => img.onclick = () => { $('#lightbox img').src = img.src; $('#lightbox').classList.remove('hidden'); });
@@ -819,6 +946,159 @@ $('#newForm').onsubmit = async (e) => {
     openChat(sid, jid);
   } catch (err) { $('#newErr').textContent = err.message; }
 };
+
+// ================== ARA ==================
+const FOREVER = 9999999999;
+let araTab = null, simConv = [];
+const fmtFecha = (f) => { if (!f) return ''; const d = new Date(f + 'T12:00:00-03:00'); return d.toLocaleDateString('es-AR', { weekday: 'short', day: '2-digit', month: '2-digit' }); };
+const MOTIVOS = { compra: 'Compra', consignacion: 'Consignación', tasacion: 'Tasación', test_drive: 'Prueba de manejo', financiacion: 'Financiación', otro: 'Otro' };
+
+function renderPill() {
+  const pill = $('#araPill'); const c = S.active;
+  if (!c) return;
+  const now = Date.now() / 1000;
+  if (c.jid.endsWith('@g.us')) { pill.className = 'pill off'; pill.textContent = '🤖 ARA no actúa en grupos'; pill.dataset.a = ''; return; }
+  if (!S.ara.enabled) { pill.className = 'pill off'; pill.textContent = '🤖 ARA apagada'; pill.dataset.a = 'open'; pill.title = 'Abrir configuración de ARA'; return; }
+  if (S.ara.sessions?.length && !S.ara.sessions.includes(c.session_id)) { pill.className = 'pill off'; pill.textContent = '🤖 ARA no trabaja en este celular'; pill.dataset.a = 'open'; return; }
+  const tests = String(S.ara.testNumbers || '').split(/[\s,;]+/).map(x => x.replace(/\D/g, '')).filter(x => x.length >= 6);
+  if (tests.length && !tests.some(n => numOf(c.jid).endsWith(n.slice(-8)))) { pill.className = 'pill off'; pill.textContent = '🧪 Modo prueba: ARA no responde acá'; pill.dataset.a = 'open'; return; }
+  if (c.needs_human) { pill.className = 'pill human'; pill.textContent = '🙋 Pidió asesor · Reactivar ARA'; pill.dataset.a = 'resume'; pill.title = c.reason || ''; return; }
+  if (c.paused_until && c.paused_until > now) {
+    const hasta = c.paused_until >= FOREVER ? '' : ' hasta ' + new Date(c.paused_until * 1000).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    pill.className = 'pill paused'; pill.textContent = '⏸ ARA pausada' + hasta + ' · Reactivar'; pill.dataset.a = 'resume'; pill.title = ''; return;
+  }
+  pill.className = 'pill active'; pill.textContent = '🤖 ARA responde · Pausar'; pill.dataset.a = 'pause'; pill.title = 'Pausar a ARA en este chat';
+}
+$('#araPill').onclick = async () => {
+  const a = $('#araPill').dataset.a, c = S.active;
+  if (!a || !c) return;
+  if (a === 'open') return openAra();
+  try { const b = await api('/api/ara/chat', { method: 'POST', body: { session: c.session_id, jid: c.jid, action: a } }); Object.assign(c, b); renderPill(); renderChats(); }
+  catch (e) { toast(e.message); }
+};
+
+async function openAra(tab = 'general') {
+  S.ara = await api('/api/ara/settings');
+  const a = S.ara;
+  $('#araEnabled').checked = !!a.enabled;
+  $('#araKeyStatus').innerHTML = (a.status.anthropic ? '<span class="ok">✓ Clave de IA configurada</span>' : '<span class="bad">✗ Falta ANTHROPIC_API_KEY en las variables de Railway</span>')
+    + ' · ' + (a.status.openai ? '<span class="ok">✓ Escucha audios</span>' : '<span class="small">Para que entienda audios: agregá OPENAI_API_KEY</span>');
+  $('#araTest').value = a.testNumbers || '';
+  $('#araPause').value = a.pauseHours; $('#araDelay').value = a.delaySec; $('#araModel').value = a.model; $('#araSlot').value = a.maxPerSlot;
+  $('#araSessions').innerHTML = S.sessions.map(s => `<label><input type="checkbox" value="${s.id}" ${a.sessions.includes(s.id) ? 'checked' : ''}> ${esc(s.name)}</label>`).join('') || '<span class="small">No hay celulares</span>';
+  const dias = [[1, 'Lunes'], [2, 'Martes'], [3, 'Miércoles'], [4, 'Jueves'], [5, 'Viernes'], [6, 'Sábado'], [0, 'Domingo']];
+  $('#araHorarios').innerHTML = dias.map(([i, n]) => `<label class="hrow"><span>${n}</span><input class="inp" data-dia="${i}" value="${esc(a.horarios[i] || '')}" placeholder="cerrado (ej: 09:00-18:00)"></label>`).join('');
+  $('#araInstr').value = a.instructions; $('#araKnow').value = a.knowledge;
+  $('#araSaved').textContent = '';
+  $('#araModal').classList.remove('hidden');
+  showAraTab(tab);
+}
+function showAraTab(t) {
+  araTab = t;
+  document.querySelectorAll('#araModal .tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  document.querySelectorAll('#araModal .pane').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== t));
+  $('#araSavebar').classList.toggle('hidden', !['general', 'train'].includes(t));
+  if (t === 'citas') loadCitas();
+  if (t === 'leads') loadLeads();
+  if (t === 'sim') { renderSim(); $('#simText').focus(); }
+}
+document.querySelectorAll('#araModal .tab').forEach(b => b.onclick = () => showAraTab(b.dataset.tab));
+document.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => {
+  if (!confirm('¿Reemplazar el texto por el ejemplo original?')) return;
+  (b.dataset.reset === 'instructions' ? $('#araInstr') : $('#araKnow')).value = S.ara.defaults[b.dataset.reset];
+});
+$('#araModal').querySelector('[data-close]').addEventListener('click', () => { araTab = null; });
+
+function araForm() {
+  const horarios = {};
+  document.querySelectorAll('#araHorarios [data-dia]').forEach(i => {
+    const v = i.value.trim().replace(/\s+/g, '').replace(/a/i, '-');
+    horarios[i.dataset.dia] = /^\d{1,2}:\d{2}-\d{1,2}:\d{2}$/.test(v) ? v.split('-').map(x => x.padStart(5, '0')).join('-') : '';
+  });
+  return {
+    enabled: $('#araEnabled').checked, testNumbers: $('#araTest').value.trim(),
+    sessions: [...document.querySelectorAll('#araSessions input:checked')].map(i => i.value),
+    pauseHours: +$('#araPause').value, delaySec: +$('#araDelay').value, model: $('#araModel').value, maxPerSlot: +$('#araSlot').value,
+    horarios, instructions: $('#araInstr').value, knowledge: $('#araKnow').value,
+  };
+}
+async function saveAra(silent) {
+  const body = araForm();
+  if (body.enabled && !S.ara.status?.anthropic && !silent) toast('Ojo: sin ANTHROPIC_API_KEY ARA no va a poder responder');
+  const st = await api('/api/ara/settings', { method: 'PUT', body });
+  S.ara = { ...S.ara, ...st };
+  renderRail(); renderPill();
+  if (!silent) { $('#araSaved').textContent = '✓ Guardado ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }); toast(st.enabled ? '🤖 ARA activa' + (st.testNumbers ? ' (modo prueba)' : '') : 'Cambios guardados'); }
+}
+$('#araSave').onclick = () => saveAra().catch(e => toast(e.message));
+
+// ---- Simulador ----
+function renderSim(extra = '') {
+  $('#simMsgs').innerHTML = (simConv.length ? '' : '<div class="act">Empezá escribiendo como cliente 👇</div>') + simConv.map(m => m.act
+    ? `<div class="act ${m.err ? 'err' : ''}">${esc(m.act)}</div>`
+    : `<div class="msg ${m.role === 'user' ? 'out' : 'in'}">${m.role === 'assistant' ? '<div class="who" style="color:#5b3fd6">ARA</div>' : ''}<div class="txt">${linkify(m.text)}</div></div>`).join('') + extra;
+  $('#simMsgs').scrollTop = $('#simMsgs').scrollHeight;
+}
+const NOMBRE_TOOL = { agendar_cita: '📅 Agendar cita', cancelar_cita: '🗑 Cancelar cita', registrar_lead: '📝 Guardar datos del cliente', derivar_a_humano: '🙋 Pasar a un asesor' };
+$('#simForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const t = $('#simText').value.trim(); if (!t) return;
+  $('#simText').value = '';
+  simConv.push({ role: 'user', text: t });
+  renderSim('<div class="act">ARA está escribiendo…</div>');
+  try {
+    await saveAra(true);
+    const r = await api('/api/ara/test', { method: 'POST', body: { conversation: simConv.filter(m => !m.act) } });
+    for (const a of r.actions) {
+      const det = Object.entries(a.input || {}).map(([k, v]) => `${k}: ${v}`).join(' · ');
+      simConv.push({ act: `${NOMBRE_TOOL[a.tool] || a.tool}\n${det}${a.result?.ok === false ? '\n✗ ' + a.result.error : ''}`, err: a.result?.ok === false });
+    }
+    if (r.silent) simConv.push({ act: 'ARA decidió no responder (no hacía falta)' });
+    for (const rep of r.replies) simConv.push({ role: 'assistant', text: rep });
+  } catch (err) { simConv.push({ act: '⚠️ ' + err.message, err: true }); }
+  renderSim();
+};
+$('#simReset').onclick = () => { simConv = []; renderSim(); };
+
+// ---- Citas ----
+let citasFilter = 'next';
+document.querySelectorAll('[data-cf]').forEach(b => b.onclick = () => { document.querySelectorAll('[data-cf]').forEach(x => x.classList.remove('on')); b.classList.add('on'); citasFilter = b.dataset.cf; loadCitas(); });
+async function loadCitas() {
+  let list = await api('/api/ara/citas');
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Cordoba' });
+  if (citasFilter === 'next') list = list.filter(c => c.fecha >= hoy && ['pendiente', 'confirmada'].includes(c.estado)).sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+  $('#citasList').innerHTML = list.length ? list.map(c => `
+    <div class="card">
+      <div class="top"><b>📅 ${fmtFecha(c.fecha)} · ${esc(c.hora)} — ${esc(c.nombre || 'Sin nombre')}</b>
+        <select class="inp" style="width:auto" data-cita="${c.id}">
+          ${[['pendiente', 'Pendiente'], ['confirmada', 'Confirmada'], ['asistio', 'Asistió ✓'], ['no_vino', 'No vino'], ['cancelada', 'Cancelada']].map(([v, l]) => `<option value="${v}" ${c.estado === v ? 'selected' : ''}>${l}</option>`).join('')}
+        </select></div>
+      <div class="kv"><b>${esc(MOTIVOS[c.motivo] || c.motivo)}</b>${c.vehiculo ? ' · ' + esc(c.vehiculo) : ''} · ${esc(c.telefono || '')} · vía ${esc(c.session_name || '')}</div>
+      ${c.notas ? `<div class="kv">${esc(c.notas)}</div>` : ''}
+      <div><button class="btn sm ghost" data-open="${c.session_id}|${esc(c.jid)}">Abrir chat</button></div>
+    </div>`).join('') : '<div class="empty">No hay citas ' + (citasFilter === 'next' ? 'próximas' : '') + '.</div>';
+  $('#citasList').querySelectorAll('[data-cita]').forEach(sel => sel.onchange = () => api('/api/ara/citas/' + sel.dataset.cita, { method: 'PATCH', body: { estado: sel.value } }).then(() => toast('Cita actualizada')).catch(e => toast(e.message)));
+  bindOpen('#citasList');
+}
+async function loadLeads() {
+  const list = await api('/api/ara/leads');
+  const F = [['interes', 'Interés'], ['vehiculo_interes', 'Busca'], ['presupuesto', 'Presupuesto'], ['usado_entrega', 'Usado'], ['financiacion', 'Financiación'], ['notas', 'Notas']];
+  $('#leadsList').innerHTML = list.length ? list.map(l => `
+    <div class="card">
+      <div class="top"><b>👤 ${esc(l.nombre || '+' + numOf(l.jid))}</b><span class="small">+${esc(numOf(l.jid))} · ${l.updated_at ? fmtTime(l.updated_at, true) : ''}</span></div>
+      ${F.filter(([k]) => l[k]).map(([k, n]) => `<div class="kv"><b>${n}:</b> ${esc(k === 'interes' ? (MOTIVOS[l[k]] || l[k]) : l[k])}</div>`).join('')}
+      <div><button class="btn sm ghost" data-open="${l.session_id}|${esc(l.jid)}">Abrir chat</button></div>
+    </div>`).join('') : '<div class="empty">Cuando ARA hable con clientes, acá vas a ver lo que buscan.</div>';
+  bindOpen('#leadsList');
+}
+function bindOpen(root) {
+  $(root).querySelectorAll('[data-open]').forEach(b => b.onclick = () => {
+    const [sid, ...rest] = b.dataset.open.split('|');
+    $('#araModal').classList.add('hidden'); araTab = null;
+    openChat(sid, rest.join('|'));
+  });
+}
+
 
 init();
 </script>
