@@ -367,6 +367,11 @@ select.inp{padding:8px 10px}
         <label class="field"><span>IA que responde</span><select class="inp" id="araModel"></select><span class="small" id="araModelInfo"></span></label>
         <label class="field"><span>Máximo de citas en el mismo horario</span><input class="inp" type="number" min="1" id="araSlot"></label>
       </div>
+      <div class="field"><span>Consulta de crédito con Ruthina</span>
+        <label class="checks"><label><input type="checkbox" id="credOn"> ARA califica a los clientes (pide el DNI y consulta los bancos en Ruthina)</label></label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp" id="ruthinaUrl" placeholder="https://compara-conejo-production.up.railway.app" style="flex:1;min-width:260px"><button class="btn ghost" id="testRuthina">Probar conexión</button></div>
+        <div class="small" id="credStatus"></div>
+      </div>
       <div class="field"><span>Respuestas con audio</span>
         <label class="checks"><label><input type="checkbox" id="voiceOn"> Si el cliente manda un audio, ARA responde con audio (hasta que vuelva a escribir)</label></label>
         <div class="grid2">
@@ -541,6 +546,7 @@ function connectSocket() {
     if (araTab === 'citas') loadCitas();
   });
   socket.on('citas', () => { if (araTab === 'citas') loadCitas(); });
+  socket.on('credito', (c) => toast(`💳 Crédito de ${c.nombre || 'un cliente'}: ${c.resultado}`));
   socket.on('lead', () => { if (araTab === 'leads') loadLeads(); });
   socket.on('araerror', (e) => toast('⚠️ ARA no pudo responder: ' + e.error));
   socket.on('arasettings', (st) => { S.ara.enabled = st.enabled; renderRail(); renderPill(); });
@@ -1040,6 +1046,8 @@ async function openAra(tab = 'general') {
   const VOCES = [['Kore', 'Kore — mujer, firme y clara'], ['Aoede', 'Aoede — mujer, liviana'], ['Leda', 'Leda — mujer, juvenil'], ['Zephyr', 'Zephyr — mujer, luminosa'], ['Callirrhoe', 'Callirrhoe — mujer, relajada'], ['Autonoe', 'Autonoe — mujer, brillante'], ['Despina', 'Despina — mujer, suave'], ['Erinome', 'Erinome — mujer, clara'], ['Laomedeia', 'Laomedeia — mujer, animada'], ['Achernar', 'Achernar — mujer, suave'], ['Gacrux', 'Gacrux — mujer, madura'], ['Pulcherrima', 'Pulcherrima — mujer, decidida'], ['Vindemiatrix', 'Vindemiatrix — mujer, amable'], ['Sulafat', 'Sulafat — mujer, cálida'], ['Puck', 'Puck — hombre, alegre'], ['Charon', 'Charon — hombre, informativo'], ['Fenrir', 'Fenrir — hombre, enérgico'], ['Orus', 'Orus — hombre, firme']];
   $('#voiceName').innerHTML = VOCES.map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
   if (!VOCES.some(([v]) => v === a.voiceName)) $('#voiceName').insertAdjacentHTML('beforeend', `<option value="${esc(a.voiceName)}">${esc(a.voiceName)}</option>`);
+  $('#credOn').checked = !!a.creditEnabled; $('#ruthinaUrl').value = a.ruthinaUrl || '';
+  $('#credStatus').innerHTML = a.status.ruthinaKey ? '<span class="ok">✓ Clave RUTHINA_BOT_KEY cargada</span> · ARA nunca le dice montos al cliente; si no califica, le pide otro DNI.' : '<span class="bad">✗ Falta la variable RUTHINA_BOT_KEY en Railway (copiá la misma que tiene Ruthina)</span>';
   $('#voiceName').value = a.voiceName; $('#voiceOn').checked = !!a.voiceReplies; $('#voiceStyle').value = a.voiceStyle || '';
   $('#araSessions').innerHTML = S.sessions.map(s => `<label><input type="checkbox" value="${s.id}" ${a.sessions.includes(s.id) ? 'checked' : ''}> ${esc(s.name)}</label>`).join('') || '<span class="small">No hay celulares</span>';
   const dias = [[1, 'Lunes'], [2, 'Martes'], [3, 'Miércoles'], [4, 'Jueves'], [5, 'Viernes'], [6, 'Sábado'], [0, 'Domingo']];
@@ -1104,6 +1112,7 @@ function araForm() {
     pauseHours: +$('#araPause').value, delaySec: +$('#araDelay').value, model: $('#araModel').value, maxPerSlot: +$('#araSlot').value,
     horarios, instructions: $('#araInstr').value, knowledge: $('#araKnow').value,
     skills: S.ara.skills,
+    creditEnabled: $('#credOn').checked, ruthinaUrl: $('#ruthinaUrl').value.trim(),
     voiceReplies: $('#voiceOn').checked, voiceName: $('#voiceName').value, voiceStyle: $('#voiceStyle').value.trim(),
     stockEnabled: $('#stockEnabled').checked, stockUrl: $('#stockUrl').value.trim() || 'https://tutuautomotores.com',
     stockMinutes: Math.round((+$('#stockMin').value || 12) * 60), maxPhotos: +$('#stockPhotos').value, sendPhotos: $('#stockSend').checked,
@@ -1118,6 +1127,11 @@ async function saveAra(silent) {
   if (!silent) { $('#araSaved').textContent = '✓ Guardado ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }); toast(st.enabled ? '🤖 ARA activa' + (st.testNumbers ? ' (modo prueba)' : '') : 'Cambios guardados'); }
 }
 $('#araSave').onclick = () => saveAra().catch(e => toast(e.message));
+$('#testRuthina').onclick = async (e) => {
+  e.preventDefault(); const b = $('#testRuthina'); b.textContent = 'Probando…';
+  try { await saveAra(true); await api('/api/ara/test-ruthina', { method: 'POST' }); b.textContent = '✓ Conectado con Ruthina'; }
+  catch (err) { b.textContent = 'Probar conexión'; toast('✗ ' + err.message); }
+};
 
 // ---- Stock ----
 let stockData = { autos: [] };
@@ -1214,7 +1228,7 @@ function renderSim(extra = '') {
   $('#simMsgs').querySelectorAll('.player').forEach(bindPlayer);
   $('#simMsgs').scrollTop = $('#simMsgs').scrollHeight;
 }
-const NOMBRE_TOOL = { buscar_stock: '🔎 Buscar en el stock', enviar_fotos_auto: '📷 Enviar fotos del auto', agendar_cita: '📅 Agendar cita', cancelar_cita: '🗑 Cancelar cita', registrar_lead: '📝 Guardar datos del cliente', derivar_a_humano: '🙋 Pasar a un asesor' };
+const NOMBRE_TOOL = { calificar_credito: '💳 Consultar crédito en Ruthina', buscar_stock: '🔎 Buscar en el stock', enviar_fotos_auto: '📷 Enviar fotos del auto', agendar_cita: '📅 Agendar cita', cancelar_cita: '🗑 Cancelar cita', registrar_lead: '📝 Guardar datos del cliente', derivar_a_humano: '🙋 Pasar a un asesor' };
 $('#simForm').onsubmit = async (e) => {
   e.preventDefault();
   const t = $('#simText').value.trim(); if (!t) return;
@@ -1227,7 +1241,8 @@ $('#simForm').onsubmit = async (e) => {
     const r = await api('/api/ara/test', { method: 'POST', body: { voz, conversation: simConv.filter(m => !m.act && !m.fotos).map(m => ({ role: m.role, text: m.voz ? '[Audio] ' + m.text : m.text })) } });
     for (const a of r.actions) {
       const det = Object.entries(a.input || {}).map(([k, v]) => `${k}: ${v}`).join(' · ');
-      const extra = a.tool === 'buscar_stock' && a.result?.ok ? `\n→ ${a.result.total} resultado(s)` + (a.result.autos || []).slice(0, 4).map(x => `\n  • ${x.nombre} — ${x.precio}`).join('') : '';
+      const extra = a.tool === 'calificar_credito' && a.result?.ok ? `\n→ ${a.result.respuesta_final ? (a.result.tiene_credito ? '✓ Tiene crédito' + (a.result.bancos_aprobados.length ? ' (' + a.result.bancos_aprobados.join(', ') + ')' : '') : a.result.califica === false ? '✗ No califica' : 'A revisar por un asesor') : '⏳ Pendiente (los bancos siguen respondiendo)'}`
+        : a.tool === 'buscar_stock' && a.result?.ok ? `\n→ ${a.result.total} resultado(s)` + (a.result.autos || []).slice(0, 4).map(x => `\n  • ${x.nombre} — ${x.precio}`).join('') : '';
       simConv.push({ act: `${NOMBRE_TOOL[a.tool] || a.tool}${det ? '\n' + det : ''}${extra}${a.result?.ok === false ? '\n✗ ' + a.result.error : ''}`, err: a.result?.ok === false });
       if (a.tool === 'enviar_fotos_auto' && a.result?.fotos) simConv.push({ role: 'assistant', text: a.result.caption, fotos: a.result.fotos });
     }
@@ -1264,7 +1279,7 @@ async function loadCitas() {
 }
 async function loadLeads() {
   const list = await api('/api/ara/leads');
-  const F = [['interes', 'Interés'], ['vehiculo_interes', 'Busca'], ['presupuesto', 'Presupuesto'], ['usado_entrega', 'Usado'], ['financiacion', 'Financiación'], ['notas', 'Notas']];
+  const F = [['credito', 'Crédito'], ['interes', 'Interés'], ['vehiculo_interes', 'Busca'], ['presupuesto', 'Presupuesto'], ['usado_entrega', 'Usado'], ['financiacion', 'Financiación'], ['notas', 'Notas']];
   $('#leadsList').innerHTML = list.length ? list.map(l => `
     <div class="card">
       <div class="top"><b>👤 ${esc(l.nombre || '+' + numOf(l.jid))}</b><span class="small">+${esc(numOf(l.jid))} · ${l.updated_at ? fmtTime(l.updated_at, true) : ''}</span></div>

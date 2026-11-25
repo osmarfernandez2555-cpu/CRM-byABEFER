@@ -15,6 +15,7 @@ Panel web para ver y responder los WhatsApp de varios celulares desde un solo lu
 - `wa.js`: conexión de los celulares con WhatsApp (Baileys), guardado de mensajes y envíos
 - `db.js`: base de datos SQLite
 - `media.js`: conversión de audio con ffmpeg (incluido, no hay que instalar nada)
+- `credito.js`: calificación crediticia vía Ruthina (`/api/bot/calificar`)
 - `stock.js`: lectura y búsqueda del stock de la web
 - `skills.js`: habilidades de venta que vienen de fábrica
 - `ara.js`: ARA (IA con Claude, herramientas para agendar citas, guardar clientes y pasar a un asesor)
@@ -27,6 +28,7 @@ Panel web para ver y responder los WhatsApp de varios celulares desde un solo lu
 - `SESSION_SECRET` (opcional): cualquier texto largo; si lo cambiás, se cierra la sesión del panel
 - `GEMINI_API_KEY`: clave de Gemini. Si está, ARA responde con Gemini (elige sola el Flash más nuevo; se puede cambiar en ARA → General)
 - `ANTHROPIC_API_KEY` (opcional): para que ARA responda con Claude
+- `RUTHINA_BOT_KEY`: la misma clave que tiene Ruthina (compara-conejo). Con ella ARA califica clientes: pide el DNI, consulta los bancos en Ruthina y le dice al cliente si tiene crédito (nunca montos); si no califica, le pide otro DNI
 - `GROQ_API_KEY`: para que ARA entienda los audios (Whisper en Groq; se transcriben y se ven en el panel). Alternativa: `OPENAI_API_KEY`
 - `WA_LOG_LEVEL` (opcional): `warn` por defecto; `debug` para ver todo
 

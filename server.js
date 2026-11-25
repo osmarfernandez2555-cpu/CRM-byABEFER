@@ -11,6 +11,7 @@ import { q, DATA_DIR } from './db.js';
 import wa from './wa.js';
 import ara, { getSettings, saveSettings, DEFAULT_INSTRUCTIONS, DEFAULT_KNOWLEDGE, DEFAULT_SKILLS, startStockSync } from './ara.js';
 import * as stock from './stock.js';
+import * as credito from './credito.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -108,7 +109,7 @@ app.get('/media/:sid/:id', guard, wrap(async (req, res) => {
 // ---------- ARA (bot de IA) ----------
 app.get('/api/ara/settings', guard, (req, res) => res.json({
   ...getSettings(),
-  status: { anthropic: !!process.env.ANTHROPIC_API_KEY, gemini: !!ara.geminiKey(), audio: ara.audioProvider()?.name || null, openai: !!ara.audioProvider(), audioError: ara.lastAudioError || null },
+  status: { ruthinaKey: !!credito.ruthinaConfig(getSettings()).key, anthropic: !!process.env.ANTHROPIC_API_KEY, gemini: !!ara.geminiKey(), audio: ara.audioProvider()?.name || null, openai: !!ara.audioProvider(), audioError: ara.lastAudioError || null },
   defaults: { instructions: DEFAULT_INSTRUCTIONS, knowledge: DEFAULT_KNOWLEDGE, skills: DEFAULT_SKILLS },
 }));
 app.put('/api/ara/settings', guard, wrap(async (req, res) => {
@@ -149,6 +150,8 @@ app.post('/api/ara/transcribe', guard, wrap(async (req, res) => {
   if (!row || row.type !== 'audio') throw new Error('Audio no encontrado');
   res.json({ text: await ara.transcribe(req.body.session, row, { strict: true }) });
 }));
+app.post('/api/ara/test-ruthina', guard, wrap(async (req, res) => res.json(await credito.probarRuthina(getSettings()))));
+app.get('/api/ara/creditos', guard, (req, res) => res.json(credito.creditos.todos.all()));
 app.get('/api/ara/leads', guard, (req, res) => res.json(q.listLeads.all()));
 
 app.get('/health', (req, res) => res.json({ ok: true }));
@@ -162,7 +165,7 @@ io.use((socket, next) => {
 for (const ev of ['session', 'message', 'media', 'status', 'refresh', 'removed', 'msgupdate']) {
   wa.on(ev, (data) => io.emit(ev, data));
 }
-for (const ev of ['bot', 'cita', 'citas', 'lead', 'actions', 'araerror']) {
+for (const ev of ['bot', 'cita', 'citas', 'lead', 'actions', 'araerror', 'credito']) {
   ara.on(ev, (data) => io.emit(ev, data));
 }
 wa.on('message', (data) => { try { ara.onMessage(data); } catch (e) { console.error('ARA onMessage', e); } });
@@ -178,4 +181,6 @@ server.listen(PORT, () => {
   if (!process.env.PANEL_PASSWORD) console.warn('⚠️  Falta PANEL_PASSWORD: se usa la contraseña por defecto "cambiar123"');
   wa.startAll();
   startStockSync();
+  ara.startCreditPoller();
+  { const c = credito.ruthinaConfig(getSettings()); console.log(c.listo ? `💳 Crédito: ARA califica clientes con Ruthina (${c.url})` : `💳 Crédito: ${c.key ? 'apagado en el panel' : 'falta RUTHINA_BOT_KEY'} — ARA no califica`); }
 });

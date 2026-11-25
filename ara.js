@@ -7,6 +7,7 @@ import wa from './wa.js';
 import { DEFAULT_SKILLS, SKILL_TEXT_MAX, SKILL_FIXES } from './skills.js';
 import * as stock from './stock.js';
 import { pcmToWav, toMp3 } from './media.js';
+import * as credito from './credito.js';
 export { DEFAULT_SKILLS };
 
 const TZ = 'America/Argentina/Cordoba';
@@ -84,6 +85,8 @@ const DEFAULTS = {
   stockMinutes: 720,       // 12 horas
   sendPhotos: true,        // ARA puede mandar fotos de los autos
   maxPhotos: 3,
+  creditEnabled: true,     // calificar clientes con Ruthina
+  ruthinaUrl: 'https://compara-conejo-production.up.railway.app',
   voiceReplies: true,      // si el cliente manda audio, ARA responde con audio
   voiceName: 'Kore',
   voiceStyle: 'Hablá en español de Argentina, con acento rioplatense, tono cálido, simpático y seguro, como una vendedora cordobesa con mucha onda',
@@ -242,6 +245,21 @@ const STOCK_TOOLS = [
     },
   },
 ];
+const CREDIT_TOOL = {
+  name: 'calificar_credito',
+  description: 'Consulta en los bancos (a través de Ruthina) si el cliente tiene crédito disponible para financiar el auto. Necesita el DNI (7-8 números) o CUIL (11 números) del titular. Con DNI hay que indicar el sexo del titular para armar el CUIL.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      documento: { type: 'string', description: 'DNI o CUIL tal cual lo pasó el cliente' },
+      sexo: { type: 'string', enum: ['M', 'F'], description: 'Sexo del titular del DNI (deducilo del nombre o preguntalo)' },
+      nombre: { type: 'string', description: 'Nombre del titular del DNI' },
+      auto: { type: 'string', description: 'Auto que le interesa, si se sabe' },
+      rol: { type: 'string', enum: ['titular', 'segundo'], description: '"segundo" si es otro DNI (pareja, familiar, garante) porque el primero no calificó' },
+    },
+    required: ['documento'],
+  },
+};
 const PHOTO_TOOL = {
   name: 'enviar_fotos_auto',
   description: 'Manda al cliente por WhatsApp las fotos de un auto del stock (con nombre, precio y link). Usala cuando el cliente pide fotos o muestra interés concreto en una unidad. Usá el id que devuelve buscar_stock.',
@@ -251,6 +269,7 @@ const PHOTO_TOOL = {
 class Ara extends EventEmitter {
   constructor() {
     super();
+    this.notas = new Map();
     this.timers = new Map();
     this.running = new Set();
     this.pending = new Set();
@@ -270,7 +289,11 @@ ${s.knowledge}
 ${habilidadesTexto(s.skills)}=== REGLAS FIJAS (tienen prioridad sobre todo lo anterior) ===
 - No inventes precios, stock, tasas, cuotas ni condiciones. Si algo no está en CONOCIMIENTO, decí que lo confirmás con un asesor y ofrecé una cita o usá derivar_a_humano.
 ${s.stockEnabled ? `- STOCK: antes de recomendar un auto o dar un precio, usá buscar_stock. Lo que devuelve es el stock real y actualizado de la web, y manda sobre cualquier stock escrito en CONOCIMIENTO. Nunca ofrezcas un auto que no aparezca ahí. Cuando recomiendes una unidad, pasá el link de la publicación. Mostrá como mucho 3 opciones por mensaje.
-${s.sendPhotos ? '- Si el cliente pide fotos o se interesa por una unidad concreta, usá enviar_fotos_auto (las fotos se mandan solas; después no repitas el link).\n' : ''}` : ''}- Usá registrar_lead cada vez que el cliente te dé datos útiles (nombre, interés, presupuesto, usado, financiación).
+${s.sendPhotos ? '- Si el cliente pide fotos o se interesa por una unidad concreta, usá enviar_fotos_auto (las fotos se mandan solas; después no repitas el link).\n' : ''}` : ''}${credito.ruthinaConfig(s).listo ? `- CRÉDITO: si el cliente quiere financiar o pregunta si le dan crédito, ofrecé consultarlo en el momento, sin compromiso: pedile el DNI del titular y consultalo con calificar_credito. El sexo del titular deducilo del nombre; si no te das cuenta, preguntalo con naturalidad.
+- Nunca digas montos, cuotas, tasas ni qué bancos rechazaron. Si tiene crédito: decile que tiene crédito disponible (podés nombrar los bancos aprobados) y llevalo a una cita para armar la propuesta con un asesor.
+- Si NO califica: decíselo con tacto, sin culpas, y pedile el DNI de otra persona de su entorno (pareja, familiar) que pueda ser titular o garante; consultalo con calificar_credito con rol "segundo". Si ese tampoco califica, ofrecé otras opciones (contado, permuta) y una cita con un asesor.
+- Si la consulta queda pendiente, decile que lo estás consultando con los bancos y que le escribís en unos minutos. El sistema te avisa cuando llega el resultado. Nunca inventes un resultado.
+` : ''}- Usá registrar_lead cada vez que el cliente te dé datos útiles (nombre, interés, presupuesto, usado, financiación).
 - Para agendar usá agendar_cita solo después de que el cliente confirme día y hora. Después de registrarla, confirmale día, hora y la dirección.
 - NUNCA le pidas al cliente que traiga algo a la cita (título, cédula, 08, VTV, informe de dominio, DNI, recibos, llaves, ni ningún papel) ni que mande fotos o documentos antes. Solo tiene que venir. Si viene al caso, podés contarle la documentación como parte del proceso ("la transferencia y los papeles los vemos nosotros en la agencia"), pero sin pedirle nada.
 - Si te preguntan si sos un bot, una IA o una persona, respondé con la verdad: sos ARA, la asistente virtual de Tutu Automotores, y podés pasarlo con un asesor cuando quiera.
@@ -363,7 +386,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
   }
 
   // Últimos mensajes del chat en formato de la API
-  async buildHistory(sid, jid) {
+  async buildHistory(sid, jid, { allowAssistantLast = false } = {}) {
     const rows = q.listMsgs.all(sid, jid, Number.MAX_SAFE_INTEGER, 30).reverse();
     const imageIds = new Set(rows.filter(r => r.type === 'image' && !r.from_me).slice(-3).map(r => r.id));
     const turns = [];
@@ -406,7 +429,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
       else turns.push({ role, content: blocks });
     }
     while (turns.length && turns[0].role !== 'user') turns.shift();
-    if (!turns.length || turns[turns.length - 1].role !== 'user') return null;
+    if (!turns.length || (!allowAssistantLast && turns[turns.length - 1].role !== 'user')) return null;
     return turns;
   }
 
@@ -546,7 +569,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
     const actions = [];
     const gemini = /^gemini/.test(s.model);
     for (let i = 0; i < 5; i++) {
-      const tools = [...TOOLS, ...(s.stockEnabled ? STOCK_TOOLS : []), ...(s.stockEnabled && s.sendPhotos ? [PHOTO_TOOL] : [])];
+      const tools = [...TOOLS, ...(s.stockEnabled ? STOCK_TOOLS : []), ...(s.stockEnabled && s.sendPhotos ? [PHOTO_TOOL] : []), ...(credito.ruthinaConfig(s).listo ? [CREDIT_TOOL] : [])];
       const res = gemini
         ? await this.callGemini(s.model, system, messages, tools)
         : await this.callClaude({ model: s.model, max_tokens: 1024, system, messages, tools });
@@ -584,6 +607,31 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
       const cita = q.getCita.get(r.lastInsertRowid);
       this.emit('cita', { ...cita, session_name: q.getSession.get(sid)?.name });
       return { ok: true, cita_id: cita.id, mensaje: 'Cita registrada' };
+    }
+    if (name === 'calificar_credito') {
+      const r = await credito.calificar(s, { documento: input.documento, sexo: input.sexo, nombre: input.nombre || ctx.nombreWa, telefono: ctx.telefono, auto: input.auto });
+      if (!r.ok) return r;
+      const a = credito.paraAra(r.raw);
+      if (!simulate) {
+        q.upsertLead.run({ session_id: sid, jid, nombre: null, interes: 'financiacion', vehiculo_interes: input.auto || null, presupuesto: null, usado_entrega: null, financiacion: null, notas: null, updated_at: now() });
+        credito.creditos.add.run({
+          session_id: sid, jid, documento: r.documento, cuil: r.cuil, nombre: input.nombre || ctx.nombreWa || null, rol: input.rol === 'segundo' ? 'segundo' : 'titular',
+          solicitud_id: r.raw.solicitud_id != null ? String(r.raw.solicitud_id) : null, estado: a.respuesta_final ? 'final' : 'pendiente',
+          resultado: a.tiene_credito ? 'califica' : a.califica === false ? 'no_califica' : null, bancos: JSON.stringify(a.bancos_aprobados),
+          avisado: a.respuesta_final ? 1 : 0, created_at: now(), updated_at: now(),
+        });
+        credito.creditos.leadCredito.run(credito.textoLead(r.raw) + (input.rol === 'segundo' ? ' (2do DNI)' : ''), sid, jid);
+        this.emit('credito', { session_id: sid, jid, nombre: input.nombre || ctx.nombreWa, resultado: credito.textoLead(r.raw) });
+        this.emit('lead', { session_id: sid, jid });
+      }
+      let instruccion;
+      if (!a.respuesta_final) instruccion = 'Los bancos todavía están respondiendo. Decile que lo estás consultando y que le escribís en unos minutos con el resultado.';
+      else if (a.tiene_credito) instruccion = 'Tiene crédito disponible. Decíselo con alegría (sin montos) y proponé una cita para armar la propuesta con un asesor.';
+      else if (a.califica === false) instruccion = input.rol === 'segundo'
+        ? 'Este segundo DNI tampoco califica. Decíselo con tacto y ofrecé otras opciones (contado, permuta) y una cita con un asesor.'
+        : 'No califica con este DNI. Decíselo con tacto y pedile el DNI de otra persona de su entorno (pareja, familiar) que pueda ser titular o garante.';
+      else instruccion = 'Un asesor tiene que terminar de revisar la consulta. Decile que un asesor le confirma a la brevedad y proponé una cita.';
+      return { ok: true, ...a, instruccion, simulacion: simulate ? 'Consulta real hecha desde el simulador (no se avisa por WhatsApp)' : undefined };
     }
     if (name === 'buscar_stock') {
       const r = stock.buscar(input);
@@ -690,8 +738,15 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
     this.running.add(k);
     try {
       if (!this.canReply(sid, jid)) return;
-      const history = await this.buildHistory(sid, jid);
+      const notas = this.notas?.get(k) || [];
+      this.notas?.delete(k);
+      const history = await this.buildHistory(sid, jid, { allowAssistantLast: notas.length > 0 });
       if (!history) return;
+      if (notas.length) {
+        const last = history[history.length - 1];
+        const block = { type: 'text', text: notas.join('\n') };
+        if (last.role === 'user') last.content.push(block); else history.push({ role: 'user', content: [block] });
+      }
       const chat = q.getChat.get(sid, jid);
       const s0 = getSettings();
       const ultimo = q.listMsgs.all(sid, jid, Number.MAX_SAFE_INTEGER, 30).find(r => !r.from_me);
@@ -734,6 +789,35 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
       this.running.delete(k);
       if (this.pending.delete(k)) this.respond(sid, jid);
     }
+  }
+
+  // Revisa las consultas de crédito que quedaron pendientes y avisa al cliente cuando llega el resultado
+  startCreditPoller() {
+    this.notas = this.notas || new Map();
+    const tick = async () => {
+      const s = getSettings();
+      if (!credito.ruthinaConfig(s).listo) return;
+      for (const c of credito.creditos.pendientes.all(now() - 20 * 60)) {
+        try {
+          const r = await credito.consultarSolicitud(s, c.solicitud_id);
+          const a = credito.paraAra(r);
+          const vencido = c.created_at < now() - 12 * 60;
+          if (!a.respuesta_final && !vencido) continue;
+          const resultado = a.tiene_credito ? 'califica' : a.califica === false ? 'no_califica' : null;
+          credito.creditos.upd.run({ id: c.id, estado: 'final', resultado, bancos: JSON.stringify(a.bancos_aprobados), avisado: 1, updated_at: now() });
+          credito.creditos.leadCredito.run(credito.textoLead(r) + (c.rol === 'segundo' ? ' (2do DNI)' : ''), c.session_id, c.jid);
+          this.emit('credito', { session_id: c.session_id, jid: c.jid, nombre: c.nombre, resultado: credito.textoLead(r) });
+          this.emit('lead', { session_id: c.session_id, jid: c.jid });
+          const resumen = resultado === 'califica' ? `TIENE crédito disponible${a.bancos_aprobados.length ? ' (bancos: ' + a.bancos_aprobados.join(', ') + ')' : ''}`
+            : resultado === 'no_califica' ? `NO califica${c.rol === 'segundo' ? ' (era el segundo DNI)' : ''}`
+            : 'quedó para que la termine de revisar un asesor';
+          const k = c.session_id + '|' + c.jid;
+          this.notas.set(k, [...(this.notas.get(k) || []), `[Aviso del sistema, no lo escribió el cliente] Llegó el resultado de la consulta de crédito del DNI terminado en ${String(c.documento).slice(-3)} (${c.nombre || 'titular'}): ${resumen}. Escribile al cliente ahora para contarle, siguiendo las reglas de CRÉDITO.`]);
+          this.respond(c.session_id, c.jid);
+        } catch (e) { console.warn('Crédito (seguimiento):', e.message); }
+      }
+    };
+    setInterval(() => tick().catch(() => {}), 20 * 1000);
   }
 
   // Simulador del panel: misma ARA, sin WhatsApp y sin guardar nada
