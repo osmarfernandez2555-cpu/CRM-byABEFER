@@ -53,7 +53,7 @@ Botón **ARA** en la barra izquierda:
 
 - **General**: prender/apagar, modo prueba (solo responde a los números que pongas), en qué celulares trabaja, horario de citas.
 - **Entrenamiento**: personalidad, forma de vender y todo lo que sabe (stock, financiación, consignación, promos). Nunca inventa lo que no esté en Conocimiento.
-- **Stock**: ARA lee sola el stock de tutuautomotores.com (API pública de WooCommerce) cada 30 minutos, busca autos según lo que pide el cliente, pasa el link y manda las fotos por WhatsApp.
+- **Stock**: ARA lee sola el stock de tutuautomotores.com (API pública de WooCommerce) cada 12 horas (configurable), busca autos según lo que pide el cliente, pasa el link y manda las fotos por WhatsApp.
 - **Habilidades**: técnicas de venta que aplica en cada chat (descubrir la necesidad, manejo de objeciones, llevar a la cita, negociación, competencia, leer al cliente, referidos). Se prenden, apagan, editan y se pueden crear propias. Basadas en sales-skills de Craig Hewitt (ver `CREDITOS.md`).
 - **Probar a ARA**: simulador para chatear con ella sin WhatsApp (no guarda nada).
 - **Citas** y **Clientes**: lo que ARA agenda y los datos que va juntando.

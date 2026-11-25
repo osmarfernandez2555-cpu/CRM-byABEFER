@@ -384,7 +384,7 @@ select.inp{padding:8px 10px}
       <label class="switch"><input type="checkbox" id="stockEnabled"><div><b>ARA usa el stock de la web de Tutu</b><div class="small" id="stockStatus">—</div></div></label>
       <div class="grid2">
         <label class="field"><span>Página web</span><input class="inp" id="stockUrl" placeholder="https://tutuautomotores.com"></label>
-        <label class="field"><span>Actualizar cada (minutos)</span><input class="inp" type="number" min="10" id="stockMin"></label>
+        <label class="field"><span>Leer la web cada (horas)</span><input class="inp" type="number" min="0.5" step="0.5" id="stockMin"></label>
         <label class="field"><span>Fotos por auto que manda ARA</span><input class="inp" type="number" min="1" max="6" id="stockPhotos"></label>
         <label class="field"><span>&nbsp;</span><label class="checks"><label><input type="checkbox" id="stockSend"> ARA puede mandar fotos</label></label></label>
       </div>
@@ -1027,7 +1027,7 @@ async function openAra(tab = 'general') {
   const dias = [[1, 'Lunes'], [2, 'Martes'], [3, 'Miércoles'], [4, 'Jueves'], [5, 'Viernes'], [6, 'Sábado'], [0, 'Domingo']];
   $('#araHorarios').innerHTML = dias.map(([i, n]) => `<label class="hrow"><span>${n}</span><input class="inp" data-dia="${i}" value="${esc(a.horarios[i] || '')}" placeholder="cerrado (ej: 09:00-18:00)"></label>`).join('');
   $('#araInstr').value = a.instructions; $('#araKnow').value = a.knowledge;
-  $('#stockEnabled').checked = !!a.stockEnabled; $('#stockUrl').value = a.stockUrl || ''; $('#stockMin').value = a.stockMinutes;
+  $('#stockEnabled').checked = !!a.stockEnabled; $('#stockUrl').value = a.stockUrl || ''; $('#stockMin').value = a.stockMinutes / 60;
   $('#stockPhotos').value = a.maxPhotos; $('#stockSend').checked = !!a.sendPhotos;
   $('#araSaved').textContent = '';
   $('#araModal').classList.remove('hidden');
@@ -1064,7 +1064,7 @@ function araForm() {
     horarios, instructions: $('#araInstr').value, knowledge: $('#araKnow').value,
     skills: S.ara.skills,
     stockEnabled: $('#stockEnabled').checked, stockUrl: $('#stockUrl').value.trim() || 'https://tutuautomotores.com',
-    stockMinutes: +$('#stockMin').value, maxPhotos: +$('#stockPhotos').value, sendPhotos: $('#stockSend').checked,
+    stockMinutes: Math.round((+$('#stockMin').value || 12) * 60), maxPhotos: +$('#stockPhotos').value, sendPhotos: $('#stockSend').checked,
   };
 }
 async function saveAra(silent) {

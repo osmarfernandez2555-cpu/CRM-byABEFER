@@ -80,7 +80,7 @@ const DEFAULTS = {
   maxPerSlot: 3,
   stockEnabled: true,      // leer el stock de la web de Tutu
   stockUrl: 'https://tutuautomotores.com',
-  stockMinutes: 30,
+  stockMinutes: 720,       // 12 horas
   sendPhotos: true,        // ARA puede mandar fotos de los autos
   maxPhotos: 3,
   horarios: { 0: '', 1: '09:00-18:00', 2: '09:00-18:00', 3: '09:00-18:00', 4: '09:00-18:00', 5: '09:00-18:00', 6: '09:00-13:00' },
@@ -93,6 +93,7 @@ export function getSettings() {
   let saved = {};
   try { saved = JSON.parse(q.getSetting.get('ara')?.value || '{}'); } catch {}
   const def = JSON.parse(JSON.stringify(DEFAULTS)); // copia: nunca modificar los valores por defecto
+  if (saved.stockMinutes === 30) saved.stockMinutes = 720; // el valor viejo por defecto pasa a 12 horas
   const st = { ...def, ...saved, horarios: { ...def.horarios, ...(saved.horarios || {}) } };
   if (Array.isArray(saved.skills)) {
     // habilidades nuevas que vengan en futuras versiones se agregan solas
@@ -128,7 +129,7 @@ export function saveSettings(patch) {
   cur.pauseHours = Math.max(0, +cur.pauseHours || 0);
   cur.delaySec = Math.min(60, Math.max(2, +cur.delaySec || 8));
   cur.maxPerSlot = Math.max(1, +cur.maxPerSlot || 3);
-  cur.stockMinutes = Math.min(1440, Math.max(10, +cur.stockMinutes || 30));
+  cur.stockMinutes = Math.min(10080, Math.max(30, +cur.stockMinutes || 720));
   cur.maxPhotos = Math.min(6, Math.max(1, +cur.maxPhotos || 3));
   q.setSetting.run('ara', JSON.stringify(cur));
   return cur;
