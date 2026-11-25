@@ -214,6 +214,14 @@ select.inp{padding:8px 10px}
 .skill-top .t b{display:block}
 .skill textarea{min-height:260px}
 .chipb{font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;background:#ede8ff;color:#4a33b8;margin-left:6px;vertical-align:middle}
+.car{display:flex;gap:12px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:8px;text-decoration:none;color:inherit}
+.car:hover{background:#f7f9fa}
+.car img{width:84px;height:62px;object-fit:cover;border-radius:8px;background:#eee;flex:none}
+.car .t{flex:1;min-width:0}
+.car .t b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.car .p{font-weight:700;color:var(--green-d);white-space:nowrap}
+.sim-photos{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.sim-photos img{width:90px;height:68px;object-fit:cover;border-radius:6px}
 /* ---------- Celular ---------- */
 @media (max-width:860px){
   #app{grid-template-columns:58px 1fr}
@@ -340,6 +348,7 @@ select.inp{padding:8px 10px}
     <div class="tabs">
       <button class="tab on" data-tab="general">General</button>
       <button class="tab" data-tab="train">Entrenamiento</button>
+      <button class="tab" data-tab="stock">Stock</button>
       <button class="tab" data-tab="skills">Habilidades</button>
       <button class="tab" data-tab="sim">Probar a ARA</button>
       <button class="tab" data-tab="citas">Citas</button>
@@ -369,6 +378,18 @@ select.inp{padding:8px 10px}
       <div class="small">Así "entrenás" a ARA: todo lo que escribas acá es lo que sabe y cómo se comporta. Completá los <b>[COMPLETAR]</b> con datos reales; ARA nunca inventa precios ni stock que no estén en Conocimiento.</div>
       <div class="field"><span>Personalidad e instrucciones de venta <button class="btn sm ghost" data-reset="instructions">Restaurar ejemplo</button></span><textarea class="inp big" id="araInstr"></textarea></div>
       <div class="field"><span>Conocimiento: empresa, stock, financiación, consignación, promos <button class="btn sm ghost" data-reset="knowledge">Restaurar ejemplo</button></span><textarea class="inp big" id="araKnow"></textarea></div>
+    </div>
+
+    <div class="pane hidden" data-pane="stock">
+      <label class="switch"><input type="checkbox" id="stockEnabled"><div><b>ARA usa el stock de la web de Tutu</b><div class="small" id="stockStatus">—</div></div></label>
+      <div class="grid2">
+        <label class="field"><span>Página web</span><input class="inp" id="stockUrl" placeholder="https://tutuautomotores.com"></label>
+        <label class="field"><span>Actualizar cada (minutos)</span><input class="inp" type="number" min="10" id="stockMin"></label>
+        <label class="field"><span>Fotos por auto que manda ARA</span><input class="inp" type="number" min="1" max="6" id="stockPhotos"></label>
+        <label class="field"><span>&nbsp;</span><label class="checks"><label><input type="checkbox" id="stockSend"> ARA puede mandar fotos</label></label></label>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp" id="stockSearch" placeholder="Buscar en el stock (ej: hilux, suv, 0km)" style="flex:1;min-width:200px"><button class="btn ghost" id="stockRefresh">↻ Actualizar ahora</button></div>
+      <div id="stockList" style="display:grid;gap:8px"></div>
     </div>
 
     <div class="pane hidden" data-pane="skills">
@@ -1006,6 +1027,8 @@ async function openAra(tab = 'general') {
   const dias = [[1, 'Lunes'], [2, 'Martes'], [3, 'Miércoles'], [4, 'Jueves'], [5, 'Viernes'], [6, 'Sábado'], [0, 'Domingo']];
   $('#araHorarios').innerHTML = dias.map(([i, n]) => `<label class="hrow"><span>${n}</span><input class="inp" data-dia="${i}" value="${esc(a.horarios[i] || '')}" placeholder="cerrado (ej: 09:00-18:00)"></label>`).join('');
   $('#araInstr').value = a.instructions; $('#araKnow').value = a.knowledge;
+  $('#stockEnabled').checked = !!a.stockEnabled; $('#stockUrl').value = a.stockUrl || ''; $('#stockMin').value = a.stockMinutes;
+  $('#stockPhotos').value = a.maxPhotos; $('#stockSend').checked = !!a.sendPhotos;
   $('#araSaved').textContent = '';
   $('#araModal').classList.remove('hidden');
   showAraTab(tab);
@@ -1014,7 +1037,8 @@ function showAraTab(t) {
   araTab = t;
   document.querySelectorAll('#araModal .tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   document.querySelectorAll('#araModal .pane').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== t));
-  $('#araSavebar').classList.toggle('hidden', !['general', 'train', 'skills'].includes(t));
+  $('#araSavebar').classList.toggle('hidden', !['general', 'train', 'skills', 'stock'].includes(t));
+  if (t === 'stock') loadStock();
   if (t === 'skills') renderSkills();
   if (t === 'citas') loadCitas();
   if (t === 'leads') loadLeads();
@@ -1039,6 +1063,8 @@ function araForm() {
     pauseHours: +$('#araPause').value, delaySec: +$('#araDelay').value, model: $('#araModel').value, maxPerSlot: +$('#araSlot').value,
     horarios, instructions: $('#araInstr').value, knowledge: $('#araKnow').value,
     skills: S.ara.skills,
+    stockEnabled: $('#stockEnabled').checked, stockUrl: $('#stockUrl').value.trim() || 'https://tutuautomotores.com',
+    stockMinutes: +$('#stockMin').value, maxPhotos: +$('#stockPhotos').value, sendPhotos: $('#stockSend').checked,
   };
 }
 async function saveAra(silent) {
@@ -1050,6 +1076,35 @@ async function saveAra(silent) {
   if (!silent) { $('#araSaved').textContent = '✓ Guardado ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }); toast(st.enabled ? '🤖 ARA activa' + (st.testNumbers ? ' (modo prueba)' : '') : 'Cambios guardados'); }
 }
 $('#araSave').onclick = () => saveAra().catch(e => toast(e.message));
+
+// ---- Stock ----
+let stockData = { autos: [] };
+async function loadStock() {
+  try { stockData = await api('/api/ara/stock'); } catch (e) { stockData = { autos: [], error: e.message }; }
+  renderStock();
+}
+function renderStock() {
+  const d = stockData;
+  const cuando = d.updatedAt ? new Date(d.updatedAt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null;
+  $('#stockStatus').innerHTML = (d.total ? `<span class="ok">✓ ${d.total} autos cargados</span>${cuando ? ' · actualizado ' + cuando : ''}` : '<span class="bad">Sin stock cargado todavía</span>')
+    + (d.error ? ` · <span class="bad">Último intento falló: ${esc(d.error)}</span>` : '');
+  const qy = $('#stockSearch').value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/\s+/).filter(Boolean);
+  const list = (d.autos || []).filter(a => { const h = `${a.nombre} ${a.marca} ${a.tipologia} ${a.condicion} ${a.anio}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); return qy.every(t => h.includes(t)); });
+  $('#stockList').innerHTML = list.length ? `<div class="small">${list.length} autos${list.length > 60 ? ' (mostrando 60)' : ''}</div>` + list.slice(0, 60).map(a => `
+    <a class="car" href="${esc(a.link)}" target="_blank" rel="noopener">
+      <img loading="lazy" src="${esc(a.fotos[0] || '')}" alt="" onerror="this.style.visibility='hidden'">
+      <div class="t"><b>${esc(a.nombre)}</b><span class="small">${[a.anio, a.km != null ? a.km.toLocaleString('es-AR') + ' km' : '', a.combustible, a.transmision, a.tipologia].filter(Boolean).map(esc).join(' · ')}</span></div>
+      <div class="p">${esc(a.precioTexto)}</div>
+    </a>`).join('') : `<div class="empty">${d.total ? 'Nada coincide con la búsqueda.' : 'Tocá "Actualizar ahora" para traer el stock de la web.'}</div>`;
+}
+$('#stockSearch').oninput = renderStock;
+$('#stockRefresh').onclick = async () => {
+  const b = $('#stockRefresh'); b.disabled = true; b.textContent = 'Actualizando…';
+  try { await saveAra(true); const r = await api('/api/ara/stock/refresh', { method: 'POST' }); toast(`✓ ${r.total} autos cargados de la web`); }
+  catch (e) { toast('No se pudo leer la web: ' + e.message); }
+  b.disabled = false; b.textContent = '↻ Actualizar ahora';
+  loadStock();
+};
 
 // ---- Habilidades ----
 const openSkills = new Set();
@@ -1112,10 +1167,10 @@ $('#skillAdd').onclick = () => {
 function renderSim(extra = '') {
   $('#simMsgs').innerHTML = (simConv.length ? '' : '<div class="act">Empezá escribiendo como cliente 👇</div>') + simConv.map(m => m.act
     ? `<div class="act ${m.err ? 'err' : ''}">${esc(m.act)}</div>`
-    : `<div class="msg ${m.role === 'user' ? 'out' : 'in'}">${m.role === 'assistant' ? '<div class="who" style="color:#5b3fd6">ARA</div>' : ''}<div class="txt">${linkify(m.text)}</div></div>`).join('') + extra;
+    : `<div class="msg ${m.role === 'user' ? 'out' : 'in'}">${m.role === 'assistant' ? '<div class="who" style="color:#5b3fd6">ARA</div>' : ''}${m.fotos ? `<div class="sim-photos">${m.fotos.map(f => `<img src="${esc(f)}" alt="">`).join('')}</div>` : ''}<div class="txt">${linkify(m.text)}</div></div>`).join('') + extra;
   $('#simMsgs').scrollTop = $('#simMsgs').scrollHeight;
 }
-const NOMBRE_TOOL = { agendar_cita: '📅 Agendar cita', cancelar_cita: '🗑 Cancelar cita', registrar_lead: '📝 Guardar datos del cliente', derivar_a_humano: '🙋 Pasar a un asesor' };
+const NOMBRE_TOOL = { buscar_stock: '🔎 Buscar en el stock', enviar_fotos_auto: '📷 Enviar fotos del auto', agendar_cita: '📅 Agendar cita', cancelar_cita: '🗑 Cancelar cita', registrar_lead: '📝 Guardar datos del cliente', derivar_a_humano: '🙋 Pasar a un asesor' };
 $('#simForm').onsubmit = async (e) => {
   e.preventDefault();
   const t = $('#simText').value.trim(); if (!t) return;
@@ -1124,10 +1179,12 @@ $('#simForm').onsubmit = async (e) => {
   renderSim('<div class="act">ARA está escribiendo…</div>');
   try {
     await saveAra(true);
-    const r = await api('/api/ara/test', { method: 'POST', body: { conversation: simConv.filter(m => !m.act) } });
+    const r = await api('/api/ara/test', { method: 'POST', body: { conversation: simConv.filter(m => !m.act && !m.fotos) } });
     for (const a of r.actions) {
       const det = Object.entries(a.input || {}).map(([k, v]) => `${k}: ${v}`).join(' · ');
-      simConv.push({ act: `${NOMBRE_TOOL[a.tool] || a.tool}\n${det}${a.result?.ok === false ? '\n✗ ' + a.result.error : ''}`, err: a.result?.ok === false });
+      const extra = a.tool === 'buscar_stock' && a.result?.ok ? `\n→ ${a.result.total} resultado(s)` + (a.result.autos || []).slice(0, 4).map(x => `\n  • ${x.nombre} — ${x.precio}`).join('') : '';
+      simConv.push({ act: `${NOMBRE_TOOL[a.tool] || a.tool}${det ? '\n' + det : ''}${extra}${a.result?.ok === false ? '\n✗ ' + a.result.error : ''}`, err: a.result?.ok === false });
+      if (a.tool === 'enviar_fotos_auto' && a.result?.fotos) simConv.push({ role: 'assistant', text: a.result.caption, fotos: a.result.fotos });
     }
     if (r.silent) simConv.push({ act: 'ARA decidió no responder (no hacía falta)' });
     for (const rep of r.replies) simConv.push({ role: 'assistant', text: rep });

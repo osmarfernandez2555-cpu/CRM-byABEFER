@@ -373,7 +373,7 @@ class WAManager extends EventEmitter {
     return this.afterSend(sid, sock, sent, ogg);
   }
 
-  async sendFile(sid, jid, buf, mimetype, fileName, caption) {
+  async sendFile(sid, jid, buf, mimetype, fileName, caption, { byBot } = {}) {
     const sock = this.sockOf(sid);
     let content;
     if (/^image\/(jpeg|png|webp)/.test(mimetype)) content = { image: buf, caption, mimetype };
@@ -382,6 +382,7 @@ class WAManager extends EventEmitter {
     else content = { document: buf, mimetype, fileName, caption };
     const messageId = generateMessageIDV2(sock.user?.id);
     this.skipDownload.add(messageId);
+    if (byBot) { this.botIds.add(messageId); setTimeout(() => this.botIds.delete(messageId), 10 * 60 * 1000); }
     const sent = await sock.sendMessage(jid, content, { messageId });
     return this.afterSend(sid, sock, sent, buf);
   }

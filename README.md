@@ -15,6 +15,7 @@ Panel web para ver y responder los WhatsApp de varios celulares desde un solo lu
 - `wa.js`: conexión de los celulares con WhatsApp (Baileys), guardado de mensajes y envíos
 - `db.js`: base de datos SQLite
 - `media.js`: conversión de audio con ffmpeg (incluido, no hay que instalar nada)
+- `stock.js`: lectura y búsqueda del stock de la web
 - `skills.js`: habilidades de venta que vienen de fábrica
 - `ara.js`: ARA (IA con Claude, herramientas para agendar citas, guardar clientes y pasar a un asesor)
 - `public/index.html`: el dashboard
@@ -52,6 +53,7 @@ Botón **ARA** en la barra izquierda:
 
 - **General**: prender/apagar, modo prueba (solo responde a los números que pongas), en qué celulares trabaja, horario de citas.
 - **Entrenamiento**: personalidad, forma de vender y todo lo que sabe (stock, financiación, consignación, promos). Nunca inventa lo que no esté en Conocimiento.
+- **Stock**: ARA lee sola el stock de tutuautomotores.com (API pública de WooCommerce) cada 30 minutos, busca autos según lo que pide el cliente, pasa el link y manda las fotos por WhatsApp.
 - **Habilidades**: técnicas de venta que aplica en cada chat (descubrir la necesidad, manejo de objeciones, llevar a la cita, negociación, competencia, leer al cliente, referidos). Se prenden, apagan, editan y se pueden crear propias. Basadas en sales-skills de Craig Hewitt (ver `CREDITOS.md`).
 - **Probar a ARA**: simulador para chatear con ella sin WhatsApp (no guarda nada).
 - **Citas** y **Clientes**: lo que ARA agenda y los datos que va juntando.

@@ -9,7 +9,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { q, DATA_DIR } from './db.js';
 import wa from './wa.js';
-import ara, { getSettings, saveSettings, DEFAULT_INSTRUCTIONS, DEFAULT_KNOWLEDGE, DEFAULT_SKILLS } from './ara.js';
+import ara, { getSettings, saveSettings, DEFAULT_INSTRUCTIONS, DEFAULT_KNOWLEDGE, DEFAULT_SKILLS, startStockSync } from './ara.js';
+import * as stock from './stock.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -126,6 +127,15 @@ app.patch('/api/ara/citas/:id', guard, wrap(async (req, res) => {
   io.emit('citas', {});
   res.json(q.getCita.get(req.params.id));
 }));
+app.get('/api/ara/stock', guard, (req, res) => {
+  const c = stock.getStock();
+  res.json({ total: c.autos.length, updatedAt: c.updatedAt, error: c.error, errorAt: c.errorAt, source: c.source, autos: c.autos });
+});
+app.post('/api/ara/stock/refresh', guard, wrap(async (req, res) => {
+  const c = await stock.refresh(getSettings().stockUrl);
+  if (c.error && !c.autos.length) throw new Error(c.error);
+  res.json({ total: c.autos.length, updatedAt: c.updatedAt, error: c.error });
+}));
 app.get('/api/ara/leads', guard, (req, res) => res.json(q.listLeads.all()));
 
 app.get('/health', (req, res) => res.json({ ok: true }));
@@ -149,4 +159,5 @@ server.listen(PORT, () => {
   if (!process.env.ANTHROPIC_API_KEY) console.warn('ℹ️  ARA necesita ANTHROPIC_API_KEY para responder');
   if (!process.env.PANEL_PASSWORD) console.warn('⚠️  Falta PANEL_PASSWORD: se usa la contraseña por defecto "cambiar123"');
   wa.startAll();
+  startStockSync();
 });

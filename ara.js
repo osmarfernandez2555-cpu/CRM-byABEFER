@@ -5,6 +5,7 @@ import path from 'path';
 import { q, DATA_DIR } from './db.js';
 import wa from './wa.js';
 import { DEFAULT_SKILLS, SKILL_TEXT_MAX } from './skills.js';
+import * as stock from './stock.js';
 export { DEFAULT_SKILLS };
 
 const TZ = 'America/Argentina/Cordoba';
@@ -53,9 +54,8 @@ export const DEFAULT_KNOWLEDGE = `DATOS DE LA EMPRESA
 - Marcas: JMC, Shineray [COMPLETAR: otras]
 - Teléfono / web / Instagram: [COMPLETAR]
 
-STOCK DESTACADO (actualizalo seguido)
-- [COMPLETAR] Ej: JMC Vigus 4x4 2025 0 km — precio — colores
-- [COMPLETAR] Ej: Toyota Corolla XEi 2019, 85.000 km — precio
+STOCK
+- ARA lee el stock automáticamente de tutuautomotores.com (pestaña Stock). Acá solo agregá aclaraciones, por ejemplo unidades que llegan pronto o que no están publicadas.
 
 FINANCIACIÓN
 - [COMPLETAR] Bancos y entidades con las que trabajan, requisitos (DNI, recibo de sueldo, etc.), plazos.
@@ -78,6 +78,11 @@ const DEFAULTS = {
   delaySec: 8,             // espera a que el cliente termine de escribir
   model: 'claude-sonnet-5-5',
   maxPerSlot: 3,
+  stockEnabled: true,      // leer el stock de la web de Tutu
+  stockUrl: 'https://tutuautomotores.com',
+  stockMinutes: 30,
+  sendPhotos: true,        // ARA puede mandar fotos de los autos
+  maxPhotos: 3,
   horarios: { 0: '', 1: '09:00-18:00', 2: '09:00-18:00', 3: '09:00-18:00', 4: '09:00-18:00', 5: '09:00-18:00', 6: '09:00-13:00' },
   instructions: DEFAULT_INSTRUCTIONS,
   knowledge: DEFAULT_KNOWLEDGE,
@@ -123,6 +128,8 @@ export function saveSettings(patch) {
   cur.pauseHours = Math.max(0, +cur.pauseHours || 0);
   cur.delaySec = Math.min(60, Math.max(2, +cur.delaySec || 8));
   cur.maxPerSlot = Math.max(1, +cur.maxPerSlot || 3);
+  cur.stockMinutes = Math.min(1440, Math.max(10, +cur.stockMinutes || 30));
+  cur.maxPhotos = Math.min(6, Math.max(1, +cur.maxPhotos || 3));
   q.setSetting.run('ara', JSON.stringify(cur));
   return cur;
 }
@@ -207,6 +214,33 @@ const TOOLS = [
   },
 ];
 
+const STOCK_TOOLS = [
+  {
+    name: 'buscar_stock',
+    description: 'Busca autos disponibles en el stock publicado en la web de Tutu. Usala SIEMPRE antes de recomendar un auto o dar un precio. Podés combinar filtros. Si no hay resultados, probá con filtros más amplios.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        texto: { type: 'string', description: 'Marca y/o modelo, ej: "toyota hilux", "cronos", "jolion"' },
+        tipo: { type: 'string', description: 'Tipo de vehículo: suv, sedan, hatchback, pick-up, utilitario' },
+        condicion: { type: 'string', enum: ['0km', 'usado'] },
+        precio_max: { type: 'number', description: 'Precio máximo (número, sin puntos)' },
+        precio_min: { type: 'number' },
+        moneda: { type: 'string', enum: ['ARS', 'USD'], description: 'Moneda del presupuesto' },
+        anio_min: { type: 'number' },
+        km_max: { type: 'number' },
+        combustible: { type: 'string', description: 'nafta, diesel, gnc, eléctrico, híbrido' },
+        transmision: { type: 'string', description: 'manual o automática' },
+      },
+    },
+  },
+];
+const PHOTO_TOOL = {
+  name: 'enviar_fotos_auto',
+  description: 'Manda al cliente por WhatsApp las fotos de un auto del stock (con nombre, precio y link). Usala cuando el cliente pide fotos o muestra interés concreto en una unidad. Usá el id que devuelve buscar_stock.',
+  input_schema: { type: 'object', properties: { id: { type: 'number', description: 'id del auto (de buscar_stock)' } }, required: ['id'] },
+};
+
 class Ara extends EventEmitter {
   constructor() {
     super();
@@ -228,7 +262,8 @@ ${s.knowledge}
 
 ${habilidadesTexto(s.skills)}=== REGLAS FIJAS (tienen prioridad sobre todo lo anterior) ===
 - No inventes precios, stock, tasas, cuotas ni condiciones. Si algo no está en CONOCIMIENTO, decí que lo confirmás con un asesor y ofrecé una cita o usá derivar_a_humano.
-- Usá registrar_lead cada vez que el cliente te dé datos útiles (nombre, interés, presupuesto, usado, financiación).
+${s.stockEnabled ? `- STOCK: antes de recomendar un auto o dar un precio, usá buscar_stock. Lo que devuelve es el stock real y actualizado de la web, y manda sobre cualquier stock escrito en CONOCIMIENTO. Nunca ofrezcas un auto que no aparezca ahí. Cuando recomiendes una unidad, pasá el link de la publicación. Mostrá como mucho 3 opciones por mensaje.
+${s.sendPhotos ? '- Si el cliente pide fotos o se interesa por una unidad concreta, usá enviar_fotos_auto (las fotos se mandan solas; después no repitas el link).\n' : ''}` : ''}- Usá registrar_lead cada vez que el cliente te dé datos útiles (nombre, interés, presupuesto, usado, financiación).
 - Para agendar usá agendar_cita solo después de que el cliente confirme día y hora. Después de registrarla, confirmale día, hora y la dirección.
 - Si te preguntan si sos un bot, una IA o una persona, respondé con la verdad: sos ARA, la asistente virtual de Tutu Automotores, y podés pasarlo con un asesor cuando quiera.
 - Formato WhatsApp: texto plano, sin markdown (nada de **, #, ni tablas). Máximo 3 mensajes cortos, separados por una línea en blanco. Emojis con moderación.
@@ -240,7 +275,7 @@ ${horariosTexto(s.horarios)}`;
     const dinamico = `=== AHORA ===
 Hoy es ${largo} (fecha ${iso}). Zona horaria de Córdoba.
 
-=== CLIENTE ===
+${s.stockEnabled ? '=== STOCK EN LA WEB ===\n' + (stock.stockResumen() || 'El stock todavía no se cargó: si buscar_stock no devuelve nada, ofrecé que un asesor le pase las opciones.') + '\n\n' : ''}=== CLIENTE ===
 Nombre en WhatsApp: ${ctx.nombreWa || 'desconocido'}
 Teléfono: ${ctx.telefono || 'desconocido'}
 ${lead ? 'Datos ya registrados: ' + JSON.stringify(Object.fromEntries(Object.entries(lead).filter(([k, v]) => v && !['session_id', 'jid', 'updated_at'].includes(k)))) : 'Sin datos registrados todavía.'}
@@ -343,7 +378,8 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
     const messages = [...history];
     const actions = [];
     for (let i = 0; i < 5; i++) {
-      const res = await this.callClaude({ model: s.model, max_tokens: 1024, system, messages, tools: TOOLS });
+      const tools = [...TOOLS, ...(s.stockEnabled ? STOCK_TOOLS : []), ...(s.stockEnabled && s.sendPhotos ? [PHOTO_TOOL] : [])];
+      const res = await this.callClaude({ model: s.model, max_tokens: 1024, system, messages, tools });
       messages.push({ role: 'assistant', content: res.content });
       const uses = (res.content || []).filter(b => b.type === 'tool_use');
       if (res.stop_reason !== 'tool_use' || !uses.length) {
@@ -378,6 +414,32 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
       const cita = q.getCita.get(r.lastInsertRowid);
       this.emit('cita', { ...cita, session_name: q.getSession.get(sid)?.name });
       return { ok: true, cita_id: cita.id, mensaje: 'Cita registrada' };
+    }
+    if (name === 'buscar_stock') {
+      const r = stock.buscar(input);
+      if (!stock.getStock().autos.length) return { ok: false, error: 'El stock no está disponible ahora. Ofrecé que un asesor le pase opciones.' };
+      return { ok: true, ...r, nota: r.total > r.autos.length ? `Hay ${r.total} resultados, se muestran ${r.autos.length}. Afiná la búsqueda si hace falta.` : undefined };
+    }
+    if (name === 'enviar_fotos_auto') {
+      const a = stock.porId(input.id);
+      if (!a) return { ok: false, error: 'No encontré ese auto en el stock. Volvé a buscarlo con buscar_stock.' };
+      const fotos = a.fotos.slice(0, s.maxPhotos);
+      if (!fotos.length) return { ok: false, error: 'Ese auto no tiene fotos publicadas. Pasale el link.', link: a.link };
+      const caption = `${a.nombre}\n${a.precioTexto}${a.km != null ? ' · ' + a.km.toLocaleString('es-AR') + ' km' : ''}\n${a.link}`;
+      if (simulate) return { ok: true, simulado: true, enviadas: fotos.length, fotos, caption };
+      let enviadas = 0;
+      for (let i = 0; i < fotos.length; i++) {
+        try {
+          const r = await fetch(fotos[i], { signal: AbortSignal.timeout(20000), headers: { 'User-Agent': 'Mozilla/5.0 (CRM Tutu - ARA)' } });
+          if (!r.ok) continue;
+          const buf = Buffer.from(await r.arrayBuffer());
+          let mime = (r.headers.get('content-type') || 'image/jpeg').split(';')[0];
+          if (!/^image\/(jpeg|png|webp)$/.test(mime)) mime = 'image/jpeg';
+          await wa.sendFile(sid, jid, buf, mime, 'foto.jpg', i === 0 ? caption : undefined, { byBot: true });
+          enviadas++;
+        } catch (e) { console.warn('Foto no enviada:', e.message); }
+      }
+      return enviadas ? { ok: true, enviadas } : { ok: false, error: 'No se pudieron descargar las fotos. Pasale el link.', link: a.link };
     }
     if (name === 'cancelar_cita') {
       if (simulate) return { ok: true, simulado: true };
@@ -525,6 +587,22 @@ function splitMessages(text) {
   let parts = clean.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
   if (parts.length > 3) parts = [parts[0], parts[1], parts.slice(2).join('\n\n')];
   return parts;
+}
+
+// Sincroniza el stock de la web cada X minutos
+export function startStockSync() {
+  const tick = async () => {
+    const s = getSettings();
+    if (!s.stockEnabled) return;
+    const c = stock.getStock();
+    const last = Math.max(c.updatedAt || 0, c.errorAt || 0);
+    if (Date.now() - last > s.stockMinutes * 60 * 1000 || c.source !== s.stockUrl.replace(/\/+$/, '')) {
+      const r = await stock.refresh(s.stockUrl);
+      console.log(r.error ? `Stock: error (${r.error})` : `Stock: ${r.autos.length} autos cargados`);
+    }
+  };
+  setTimeout(tick, 3000);
+  setInterval(tick, 60 * 1000);
 }
 
 export default new Ara();
