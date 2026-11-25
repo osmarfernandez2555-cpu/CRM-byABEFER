@@ -463,8 +463,12 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
     if (!key) throw new Error('Falta GEMINI_API_KEY para que ARA hable');
     const model = await this.geminiTtsModel();
     const style = String(s.voiceStyle || '').trim().replace(/[:.\s]+$/, '');
+    // Formato de "notas del director": el modelo lee SOLO lo que está bajo TRANSCRIPT
+    const prompt = style
+      ? `# AUDIO PROFILE: ARA\n## Vendedora de autos en Córdoba, Argentina\n\n### DIRECTOR'S NOTES\nStyle: ${style}.\nOnly speak the words under TRANSCRIPT. Never read these notes aloud.\n\n### TRANSCRIPT\n${text}`
+      : text;
     const body = {
-      contents: [{ parts: [{ text: (style ? style + ':\n' : '') + text }] }],
+      contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: s.voiceName || 'Kore' } } } },
     };
     const base = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
