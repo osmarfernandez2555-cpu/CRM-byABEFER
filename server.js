@@ -1,0 +1,122 @@
+// CRM WhatsApp — servidor web + API + tiempo real
+import express from 'express';
+import http from 'http';
+import { Server } from 'socket.io';
+import cookieParser from 'cookie-parser';
+import multer from 'multer';
+import crypto from 'crypto';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { q, DATA_DIR } from './db.js';
+import wa from './wa.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PORT = process.env.PORT || 3000;
+const PASSWORD = process.env.PANEL_PASSWORD || 'cambiar123';
+const SECRET = process.env.SESSION_SECRET || crypto.createHash('sha256').update('crm-wa|' + PASSWORD).digest('hex');
+const TOKEN = crypto.createHmac('sha256', SECRET).update('panel-ok').digest('hex');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { maxHttpBufferSize: 1e6 });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 64 * 1024 * 1024 } });
+
+app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
+
+const authed = (req) => req.cookies?.crm_token === TOKEN;
+const guard = (req, res, next) => authed(req) ? next() : res.status(401).json({ error: 'No autorizado' });
+const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch(e => {
+  console.error(e);
+  res.status(400).json({ error: e.message || 'Error' });
+});
+
+// ---------- Login ----------
+app.post('/api/login', (req, res) => {
+  if (req.body?.password !== PASSWORD) return res.status(401).json({ error: 'Contraseña incorrecta' });
+  res.cookie('crm_token', TOKEN, { httpOnly: true, sameSite: 'lax', maxAge: 30 * 24 * 3600 * 1000, secure: req.secure || req.headers['x-forwarded-proto'] === 'https' });
+  res.json({ ok: true });
+});
+app.post('/api/logout', (req, res) => { res.clearCookie('crm_token'); res.json({ ok: true }); });
+app.get('/api/me', (req, res) => res.json({ ok: authed(req) }));
+
+// ---------- Celulares ----------
+app.get('/api/sessions', guard, (req, res) => res.json(wa.list()));
+app.post('/api/sessions', guard, wrap(async (req, res) => {
+  const id = wa.add((req.body?.name || '').trim() || 'Celular');
+  await wa.start(id, { pairPhone: req.body?.pairPhone || undefined });
+  res.json(wa.state(id));
+}));
+app.post('/api/sessions/:id/connect', guard, wrap(async (req, res) => {
+  if (!q.getSession.get(req.params.id)) throw new Error('No existe');
+  await wa.start(req.params.id, { pairPhone: req.body?.pairPhone || undefined });
+  res.json(wa.state(req.params.id));
+}));
+app.patch('/api/sessions/:id', guard, wrap(async (req, res) => {
+  q.renameSession.run((req.body?.name || '').trim() || 'Celular', req.params.id);
+  wa.emitState(req.params.id);
+  res.json(wa.state(req.params.id));
+}));
+app.post('/api/sessions/:id/logout', guard, wrap(async (req, res) => { await wa.logout(req.params.id); res.json({ ok: true }); }));
+app.delete('/api/sessions/:id', guard, wrap(async (req, res) => { await wa.remove(req.params.id); res.json({ ok: true }); }));
+
+// ---------- Chats y mensajes ----------
+app.get('/api/chats', guard, (req, res) => {
+  res.json(q.listChats.all({ session_id: req.query.session || null, limit: Math.min(+req.query.limit || 300, 2000) }));
+});
+app.get('/api/messages', guard, (req, res) => {
+  const { session, jid } = req.query;
+  const before = +req.query.before || Number.MAX_SAFE_INTEGER;
+  const limit = Math.min(+req.query.limit || 60, 300);
+  res.json(q.listMsgs.all(session, jid, before, limit).reverse());
+});
+app.post('/api/read', guard, wrap(async (req, res) => {
+  await wa.markRead(req.body.session, req.body.jid);
+  res.json({ ok: true });
+}));
+app.post('/api/new-chat', guard, wrap(async (req, res) => {
+  const jid = await wa.checkNumber(req.body.session, req.body.phone || '');
+  res.json({ jid });
+}));
+
+// ---------- Enviar ----------
+app.post('/api/send/text', guard, wrap(async (req, res) => {
+  const { session, jid, text } = req.body;
+  if (!text?.trim()) throw new Error('Mensaje vacío');
+  res.json(await wa.sendText(session, jid, text));
+}));
+app.post('/api/send/voice', guard, upload.single('audio'), wrap(async (req, res) => {
+  if (!req.file) throw new Error('Falta el audio');
+  res.json(await wa.sendVoice(req.body.session, req.body.jid, req.file.buffer));
+}));
+app.post('/api/send/file', guard, upload.single('file'), wrap(async (req, res) => {
+  if (!req.file) throw new Error('Falta el archivo');
+  const name = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+  res.json(await wa.sendFile(req.body.session, req.body.jid, req.file.buffer, req.file.mimetype || 'application/octet-stream', name, req.body.caption || undefined));
+}));
+
+// ---------- Media (descarga a demanda + soporte de adelantar/atrasar el audio) ----------
+app.get('/media/:sid/:id', guard, wrap(async (req, res) => {
+  const row = await wa.downloadMedia(req.params.sid, req.params.id);
+  res.type(row.media_mime || 'application/octet-stream');
+  if (req.query.dl) res.attachment(row.file_name || path.basename(row.media_file));
+  res.sendFile(path.join(DATA_DIR, 'media', row.media_file), { maxAge: '7d' });
+}));
+
+app.get('/health', (req, res) => res.json({ ok: true }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ---------- Tiempo real ----------
+io.use((socket, next) => {
+  const cookies = Object.fromEntries((socket.handshake.headers.cookie || '').split(';').map(c => c.trim().split('=').map(decodeURIComponent)));
+  cookies.crm_token === TOKEN ? next() : next(new Error('No autorizado'));
+});
+for (const ev of ['session', 'message', 'media', 'status', 'refresh', 'removed']) {
+  wa.on(ev, (data) => io.emit(ev, data));
+}
+
+server.listen(PORT, () => {
+  console.log(`CRM WhatsApp en http://localhost:${PORT}  (datos en ${DATA_DIR})`);
+  if (!process.env.PANEL_PASSWORD) console.warn('⚠️  Falta PANEL_PASSWORD: se usa la contraseña por defecto "cambiar123"');
+  wa.startAll();
+});
