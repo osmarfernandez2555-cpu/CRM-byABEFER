@@ -108,7 +108,7 @@ app.get('/media/:sid/:id', guard, wrap(async (req, res) => {
 // ---------- ARA (bot de IA) ----------
 app.get('/api/ara/settings', guard, (req, res) => res.json({
   ...getSettings(),
-  status: { anthropic: !!process.env.ANTHROPIC_API_KEY, openai: !!ara.openaiKey(), audioError: ara.lastAudioError || null },
+  status: { anthropic: !!process.env.ANTHROPIC_API_KEY, gemini: !!ara.geminiKey(), audio: ara.audioProvider()?.name || null, openai: !!ara.audioProvider(), audioError: ara.lastAudioError || null },
   defaults: { instructions: DEFAULT_INSTRUCTIONS, knowledge: DEFAULT_KNOWLEDGE, skills: DEFAULT_SKILLS },
 }));
 app.put('/api/ara/settings', guard, wrap(async (req, res) => {
@@ -136,6 +136,13 @@ app.post('/api/ara/stock/refresh', guard, wrap(async (req, res) => {
   if (c.error && !c.autos.length) throw new Error(c.error);
   res.json({ total: c.autos.length, updatedAt: c.updatedAt, error: c.error });
 }));
+app.get('/api/ara/models', guard, wrap(async (req, res) => {
+  let gemini = [], geminiError = null, geminiAuto = null;
+  if (ara.geminiKey()) {
+    try { gemini = await ara.geminiModels(); geminiAuto = await ara.resolveGemini('gemini-auto'); } catch (e) { geminiError = e.message; }
+  }
+  res.json({ gemini, geminiAuto, geminiError });
+}));
 app.post('/api/ara/test-audio', guard, wrap(async (req, res) => res.json(await ara.testOpenAI())));
 app.post('/api/ara/transcribe', guard, wrap(async (req, res) => {
   const row = q.getMsg.get(req.body.session, req.body.id);
@@ -162,8 +169,11 @@ wa.on('message', (data) => { try { ara.onMessage(data); } catch (e) { console.er
 
 server.listen(PORT, () => {
   console.log(`CRM WhatsApp en http://localhost:${PORT}  (datos en ${DATA_DIR})`);
-  console.log(process.env.ANTHROPIC_API_KEY ? '🤖 ARA: clave de IA cargada' : 'ℹ️  ARA necesita ANTHROPIC_API_KEY para responder');
-  console.log(ara.openaiKey() ? '🎧 Audios: clave de OpenAI cargada, ARA escucha los audios' : '🎧 Audios: falta OPENAI_API_KEY, ARA no puede escuchar audios');
+  console.log(`🤖 Claves de IA: Claude ${process.env.ANTHROPIC_API_KEY ? '✓' : '✗'} · Gemini ${ara.geminiKey() ? '✓' : '✗'}`);
+  const audio = ara.audioProvider();
+  console.log(audio ? `🎧 Audios: ARA escucha con ${audio.name} (${audio.model})` : '🎧 Audios: falta GROQ_API_KEY, ARA no puede escuchar audios');
+  const st = getSettings();
+  console.log(`🧠 ARA responde con: ${/^gemini/.test(st.model) ? 'Gemini (' + st.model + ')' : 'Claude (' + st.model + ')'}`);
   if (!process.env.PANEL_PASSWORD) console.warn('⚠️  Falta PANEL_PASSWORD: se usa la contraseña por defecto "cambiar123"');
   wa.startAll();
   startStockSync();

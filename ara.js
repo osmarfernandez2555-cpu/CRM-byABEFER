@@ -93,6 +93,7 @@ export function getSettings() {
   let saved = {};
   try { saved = JSON.parse(q.getSetting.get('ara')?.value || '{}'); } catch {}
   const def = JSON.parse(JSON.stringify(DEFAULTS)); // copia: nunca modificar los valores por defecto
+  if (String(process.env.GEMINI_API_KEY || '').trim()) def.model = 'gemini-auto'; // con clave de Gemini, responde Gemini por defecto
   if (saved.stockMinutes === 30) saved.stockMinutes = 720; // el valor viejo por defecto pasa a 12 horas
   const st = { ...def, ...saved, horarios: { ...def.horarios, ...(saved.horarios || {}) } };
   if (Array.isArray(saved.skills)) {
@@ -289,14 +290,21 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
     ];
   }
 
-  openaiKey() {
-    return String(process.env.OPENAI_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+  // Proveedor para escuchar audios: Groq si está GROQ_API_KEY, si no OpenAI
+  audioProvider() {
+    const clean = (v) => String(v || '').trim().replace(/^["']|["']$/g, '');
+    const groq = clean(process.env.GROQ_API_KEY);
+    if (groq) return { name: 'Groq', key: groq, base: process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1', model: process.env.GROQ_TRANSCRIBE_MODEL || 'whisper-large-v3-turbo' };
+    const oa = clean(process.env.OPENAI_API_KEY);
+    if (oa) return { name: 'OpenAI', key: oa, base: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1', model: process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1' };
+    return null;
   }
+  openaiKey() { return this.audioProvider()?.key || ''; }
 
-  // Transcribe un audio con OpenAI. Si falla, avisa en el panel y devuelve null (o tira el error si strict).
+  // Transcribe un audio. Si falla, avisa en el panel y devuelve null (o tira el error si strict).
   async transcribe(sid, row, { strict = false } = {}) {
-    const key = this.openaiKey();
-    if (!key) { if (strict) throw new Error('Falta la variable OPENAI_API_KEY en Railway'); return null; }
+    const prov = this.audioProvider();
+    if (!prov) { if (strict) throw new Error('Falta GROQ_API_KEY (u OPENAI_API_KEY) en Railway'); return null; }
     const k = sid + '|' + row.id;
     if (!this.transcribing.has(k)) {
       const p = (async () => {
@@ -307,16 +315,17 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
         const mime = { mp3: 'audio/mpeg', ogg: 'audio/ogg', m4a: 'audio/mp4', mp4: 'audio/mp4', wav: 'audio/wav', webm: 'audio/webm' }[ext] || r.media_mime || 'audio/mpeg';
         const fd = new FormData();
         fd.append('file', new Blob([buf], { type: mime }), 'audio.' + (ext === 'oga' || ext === 'opus' ? 'ogg' : ext));
-        fd.append('model', process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1');
+        fd.append('model', prov.model);
         fd.append('language', 'es');
-        const res = await fetch((process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1') + '/audio/transcriptions', {
-          method: 'POST', headers: { Authorization: 'Bearer ' + key }, body: fd, signal: AbortSignal.timeout(60000),
+        fd.append('response_format', 'json');
+        const res = await fetch(prov.base + '/audio/transcriptions', {
+          method: 'POST', headers: { Authorization: 'Bearer ' + prov.key }, body: fd, signal: AbortSignal.timeout(60000),
         });
         const d = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(`OpenAI (${res.status}): ${d?.error?.message || 'error al transcribir'}`);
+        if (!res.ok) throw new Error(`${prov.name} (${res.status}): ${d?.error?.message || 'error al transcribir'}`);
         const text = (d.text || '').trim();
         if (text) wa.setText(sid, row.id, text);
-        console.log(`🎧 Audio transcripto (${row.seconds || '?'} s): ${text.slice(0, 80)}${text.length > 80 ? '…' : ''}`);
+        console.log(`🎧 Audio transcripto con ${prov.name} (${row.seconds || '?'} s): ${text.slice(0, 80)}${text.length > 80 ? '…' : ''}`);
         return text || '(audio sin palabras)';
       })();
       this.transcribing.set(k, p);
@@ -337,12 +346,12 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
   }
 
   async testOpenAI() {
-    const key = this.openaiKey();
-    if (!key) throw new Error('Falta la variable OPENAI_API_KEY en Railway');
-    const res = await fetch((process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1') + '/models', { headers: { Authorization: 'Bearer ' + key }, signal: AbortSignal.timeout(20000) });
+    const prov = this.audioProvider();
+    if (!prov) throw new Error('Falta GROQ_API_KEY (u OPENAI_API_KEY) en Railway');
+    const res = await fetch(prov.base + '/models', { headers: { Authorization: 'Bearer ' + prov.key }, signal: AbortSignal.timeout(20000) });
     const d = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(`OpenAI (${res.status}): ${d?.error?.message || 'clave inválida'}`);
-    return { ok: true, modelos: (d.data || []).length };
+    if (!res.ok) throw new Error(`${prov.name} (${res.status}): ${d?.error?.message || 'clave inválida'}`);
+    return { ok: true, proveedor: prov.name };
   }
 
   // Últimos mensajes del chat en formato de la API
@@ -407,15 +416,91 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
     return data;
   }
 
+  geminiKey() { return String(process.env.GEMINI_API_KEY || '').trim().replace(/^["']|["']$/g, ''); }
+
+  // Lista de modelos de Gemini disponibles para la clave (se guarda 6 horas)
+  async geminiModels() {
+    if (this._gm && Date.now() - this._gm.at < 6 * 3600 * 1000) return this._gm.list;
+    const key = this.geminiKey();
+    if (!key) throw new Error('Falta la variable GEMINI_API_KEY en Railway');
+    const base = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
+    const res = await fetch(base + '/models?pageSize=1000', { headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(20000) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`Gemini (${res.status}): ${d?.error?.message || 'clave inválida'}`);
+    const list = (d.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map(m => ({ id: m.name.replace(/^models\//, ''), nombre: m.displayName || m.name }))
+      .filter(m => /^gemini-/.test(m.id) && !/(image|tts|audio|live|embedding|vision|robotics|computer|native)/i.test(m.id));
+    this._gm = { at: Date.now(), list };
+    return list;
+  }
+
+  // "gemini-auto": el Flash estable más nuevo disponible
+  async resolveGemini(model) {
+    if (model !== 'gemini-auto') return model;
+    const list = await this.geminiModels();
+    const ver = (id) => { const m = id.match(/^gemini-(\d+(?:\.\d+)?)/); return m ? +m[1] : 0; };
+    const pick = (re) => list.filter(m => re.test(m.id)).sort((a, b) => ver(b.id) - ver(a.id))[0];
+    const best = pick(/^gemini-\d+(\.\d+)?-flash$/) || pick(/^gemini-.*flash(?!.*lite)/) || pick(/^gemini-.*pro/) || list[0];
+    if (!best) throw new Error('Tu clave de Gemini no tiene modelos disponibles');
+    return best.id;
+  }
+
+  async callGemini(model, system, messages, tools) {
+    const key = this.geminiKey();
+    if (!key) throw new Error('Falta la variable GEMINI_API_KEY en Railway');
+    const id = await this.resolveGemini(model);
+    const names = {};
+    for (const m of messages) for (const b of m.content || []) if (b.type === 'tool_use') names[b.id] = b.name;
+    const contents = messages.map(m => {
+      if (m._raw) return { role: 'model', parts: m._raw };
+      const parts = m.content.map(b => {
+        if (b.type === 'text') return { text: b.text };
+        if (b.type === 'image') return { inlineData: { mimeType: b.source.media_type, data: b.source.data } };
+        if (b.type === 'tool_use') return { functionCall: { name: b.name, args: b.input || {} } };
+        if (b.type === 'tool_result') {
+          let r; try { r = JSON.parse(b.content); } catch { r = { resultado: b.content }; }
+          return { functionResponse: { name: names[b.tool_use_id] || 'herramienta', response: r } };
+        }
+        return null;
+      }).filter(Boolean);
+      return { role: m.role === 'assistant' ? 'model' : 'user', parts };
+    });
+    const body = {
+      systemInstruction: { parts: [{ text: system.map(b => b.text).join('\n\n') }] },
+      contents,
+      tools: tools.length ? [{ functionDeclarations: tools.map(t => ({ name: t.name, description: t.description, parameters: t.input_schema })) }] : undefined,
+      generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
+    };
+    const base = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
+    const res = await fetch(`${base}/models/${encodeURIComponent(id)}:generateContent`, {
+      method: 'POST', headers: { 'x-goog-api-key': key, 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(90000),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`Gemini ${id} (${res.status}): ${d?.error?.message || 'error'}`);
+    const cand = d.candidates?.[0];
+    if (!cand) throw new Error('Gemini no respondió' + (d.promptFeedback?.blockReason ? ` (bloqueado: ${d.promptFeedback.blockReason})` : ''));
+    const raw = cand.content?.parts || [];
+    const content = [];
+    raw.forEach((p, i) => {
+      if (p.functionCall) content.push({ type: 'tool_use', id: `g${Date.now()}_${i}`, name: p.functionCall.name, input: p.functionCall.args || {} });
+      else if (p.text && !p.thought) content.push({ type: 'text', text: p.text });
+    });
+    return { content, raw, stop_reason: content.some(b => b.type === 'tool_use') ? 'tool_use' : 'end_turn', model: id };
+  }
+
   async runAgent(ctx, history, simulate) {
     const s = getSettings();
     const system = this.buildSystem(s, ctx);
     const messages = [...history];
     const actions = [];
+    const gemini = /^gemini/.test(s.model);
     for (let i = 0; i < 5; i++) {
       const tools = [...TOOLS, ...(s.stockEnabled ? STOCK_TOOLS : []), ...(s.stockEnabled && s.sendPhotos ? [PHOTO_TOOL] : [])];
-      const res = await this.callClaude({ model: s.model, max_tokens: 1024, system, messages, tools });
-      messages.push({ role: 'assistant', content: res.content });
+      const res = gemini
+        ? await this.callGemini(s.model, system, messages, tools)
+        : await this.callClaude({ model: s.model, max_tokens: 1024, system, messages, tools });
+      messages.push(gemini ? { role: 'assistant', content: res.content, _raw: res.raw } : { role: 'assistant', content: res.content });
       const uses = (res.content || []).filter(b => b.type === 'tool_use');
       if (res.stop_reason !== 'tool_use' || !uses.length) {
         const text = (res.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n\n').trim();

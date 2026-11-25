@@ -25,8 +25,9 @@ Panel web para ver y responder los WhatsApp de varios celulares desde un solo lu
 - `PANEL_PASSWORD`: contraseña para entrar al panel (**obligatoria**)
 - `DATA_DIR`: carpeta donde se guardan sesiones, base y archivos. En Railway: `/data`
 - `SESSION_SECRET` (opcional): cualquier texto largo; si lo cambiás, se cierra la sesión del panel
-- `ANTHROPIC_API_KEY`: clave de la API de Claude, la necesita ARA para responder
-- `OPENAI_API_KEY` (opcional): para que ARA entienda los audios (se transcriben y se ven en el panel)
+- `GEMINI_API_KEY`: clave de Gemini. Si está, ARA responde con Gemini (elige sola el Flash más nuevo; se puede cambiar en ARA → General)
+- `ANTHROPIC_API_KEY` (opcional): para que ARA responda con Claude
+- `GROQ_API_KEY`: para que ARA entienda los audios (Whisper en Groq; se transcriben y se ven en el panel). Alternativa: `OPENAI_API_KEY`
 - `WA_LOG_LEVEL` (opcional): `warn` por defecto; `debug` para ver todo
 
 ## Probar en la PC

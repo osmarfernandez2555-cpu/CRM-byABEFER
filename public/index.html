@@ -364,11 +364,7 @@ select.inp{padding:8px 10px}
       <div class="grid2">
         <label class="field"><span>Si responde una persona, ARA se calla (horas)</span><input class="inp" type="number" min="0" id="araPause"></label>
         <label class="field"><span>Espera antes de responder (segundos)</span><input class="inp" type="number" min="2" max="60" id="araDelay"></label>
-        <label class="field"><span>Modelo de IA</span><select class="inp" id="araModel">
-          <option value="claude-sonnet-5-5">Claude Sonnet 5.5 — recomendado</option>
-          <option value="claude-haiku-5-5">Claude Haiku 5.5 — más barato y rápido</option>
-          <option value="claude-opus-5-5">Claude Opus 5.5 — máxima calidad</option>
-        </select></label>
+        <label class="field"><span>IA que responde</span><select class="inp" id="araModel"></select><span class="small" id="araModelInfo"></span></label>
         <label class="field"><span>Máximo de citas en el mismo horario</span><input class="inp" type="number" min="1" id="araSlot"></label>
       </div>
       <div class="field"><span>Horario de atención para citas (vacío = cerrado)</span><div class="grid2" id="araHorarios"></div></div>
@@ -1025,13 +1021,14 @@ async function openAra(tab = 'general') {
   S.ara = await api('/api/ara/settings');
   const a = S.ara;
   $('#araEnabled').checked = !!a.enabled;
-  $('#araKeyStatus').innerHTML = (a.status.anthropic ? '<span class="ok">✓ Clave de IA configurada</span>' : '<span class="bad">✗ Falta ANTHROPIC_API_KEY en las variables de Railway</span>')
-    + ' · ' + (a.status.openai ? '<span class="ok">✓ Clave de audios cargada</span> <button class="btn sm ghost" id="testAudio">Probar clave de audios</button>' : '<span class="small">Para que entienda audios: agregá OPENAI_API_KEY</span>')
+  $('#araKeyStatus').innerHTML = `Claude ${a.status.anthropic ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>'} · Gemini ${a.status.gemini ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>'}`
+    + ' · ' + (a.status.audio ? `<span class="ok">🎧 Escucha audios con ${esc(a.status.audio)}</span> <button class="btn sm ghost" id="testAudio">Probar audios</button>` : '<span class="small">Para que entienda audios: agregá GROQ_API_KEY</span>')
     + (a.status.audioError ? `<div class="bad" style="margin-top:4px">Último error de audio: ${esc(a.status.audioError.error)}</div>` : '');
   const ta = $('#testAudio');
   if (ta) ta.onclick = async (e) => { e.preventDefault(); ta.textContent = 'Probando…'; try { await api('/api/ara/test-audio', { method: 'POST' }); ta.textContent = '✓ La clave funciona'; } catch (err) { ta.textContent = 'Probar clave de audios'; toast('✗ ' + err.message); } };
   $('#araTest').value = a.testNumbers || '';
-  $('#araPause').value = a.pauseHours; $('#araDelay').value = a.delaySec; $('#araModel').value = a.model; $('#araSlot').value = a.maxPerSlot;
+  $('#araPause').value = a.pauseHours; $('#araDelay').value = a.delaySec; $('#araSlot').value = a.maxPerSlot;
+  fillModels(a.model);
   $('#araSessions').innerHTML = S.sessions.map(s => `<label><input type="checkbox" value="${s.id}" ${a.sessions.includes(s.id) ? 'checked' : ''}> ${esc(s.name)}</label>`).join('') || '<span class="small">No hay celulares</span>';
   const dias = [[1, 'Lunes'], [2, 'Martes'], [3, 'Miércoles'], [4, 'Jueves'], [5, 'Viernes'], [6, 'Sábado'], [0, 'Domingo']];
   $('#araHorarios').innerHTML = dias.map(([i, n]) => `<label class="hrow"><span>${n}</span><input class="inp" data-dia="${i}" value="${esc(a.horarios[i] || '')}" placeholder="cerrado (ej: 09:00-18:00)"></label>`).join('');
@@ -1041,6 +1038,29 @@ async function openAra(tab = 'general') {
   $('#araSaved').textContent = '';
   $('#araModal').classList.remove('hidden');
   showAraTab(tab);
+}
+const CLAUDE_MODELS = [['claude-sonnet-5-5', 'Claude Sonnet 5.5'], ['claude-haiku-5-5', 'Claude Haiku 5.5 (más barato)'], ['claude-opus-5-5', 'Claude Opus 5.5 (máxima calidad)']];
+let geminiCache = null;
+async function fillModels(current) {
+  const sel = $('#araModel');
+  const render = () => {
+    const g = geminiCache || { gemini: [] };
+    const opts = [];
+    if (S.ara.status?.gemini) {
+      opts.push(`<optgroup label="Gemini"><option value="gemini-auto">Gemini automático${g.geminiAuto ? ' (' + esc(g.geminiAuto) + ')' : ''} — recomendado</option>`
+        + g.gemini.map(m => `<option value="${esc(m.id)}">${esc(m.nombre)} · ${esc(m.id)}</option>`).join('') + '</optgroup>');
+    }
+    opts.push('<optgroup label="Claude">' + CLAUDE_MODELS.map(([v, n]) => `<option value="${v}">${n}${S.ara.status?.anthropic ? '' : ' (falta clave)'}</option>`).join('') + '</optgroup>');
+    sel.innerHTML = opts.join('');
+    if (current && !sel.querySelector(`option[value="${CSS.escape(current)}"]`)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(current)}">${esc(current)}</option>`);
+    sel.value = current;
+    $('#araModelInfo').innerHTML = g.geminiError ? `<span class="bad">Gemini: ${esc(g.geminiError)}</span>` : '';
+  };
+  render();
+  if (S.ara.status?.gemini && !geminiCache) {
+    try { geminiCache = await api('/api/ara/models'); } catch (e) { geminiCache = { gemini: [], geminiError: e.message }; }
+    current = sel.value || current; render();
+  }
 }
 function showAraTab(t) {
   araTab = t;
