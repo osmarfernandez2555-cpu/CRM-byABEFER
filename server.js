@@ -108,7 +108,7 @@ app.get('/media/:sid/:id', guard, wrap(async (req, res) => {
 // ---------- ARA (bot de IA) ----------
 app.get('/api/ara/settings', guard, (req, res) => res.json({
   ...getSettings(),
-  status: { anthropic: !!process.env.ANTHROPIC_API_KEY, openai: !!process.env.OPENAI_API_KEY },
+  status: { anthropic: !!process.env.ANTHROPIC_API_KEY, openai: !!ara.openaiKey(), audioError: ara.lastAudioError || null },
   defaults: { instructions: DEFAULT_INSTRUCTIONS, knowledge: DEFAULT_KNOWLEDGE, skills: DEFAULT_SKILLS },
 }));
 app.put('/api/ara/settings', guard, wrap(async (req, res) => {
@@ -135,6 +135,12 @@ app.post('/api/ara/stock/refresh', guard, wrap(async (req, res) => {
   const c = await stock.refresh(getSettings().stockUrl);
   if (c.error && !c.autos.length) throw new Error(c.error);
   res.json({ total: c.autos.length, updatedAt: c.updatedAt, error: c.error });
+}));
+app.post('/api/ara/test-audio', guard, wrap(async (req, res) => res.json(await ara.testOpenAI())));
+app.post('/api/ara/transcribe', guard, wrap(async (req, res) => {
+  const row = q.getMsg.get(req.body.session, req.body.id);
+  if (!row || row.type !== 'audio') throw new Error('Audio no encontrado');
+  res.json({ text: await ara.transcribe(req.body.session, row, { strict: true }) });
 }));
 app.get('/api/ara/leads', guard, (req, res) => res.json(q.listLeads.all()));
 

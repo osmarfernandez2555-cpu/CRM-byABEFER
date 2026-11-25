@@ -523,7 +523,7 @@ function connectSocket() {
     const m = S.msgs.find(x => x.session_id === sessionId && x.id === id);
     if (!m) return; m.text = text;
     const el = document.querySelector(`[data-mid="${CSS.escape(id)}"]`);
-    if (el && m.type === 'audio' && !el.querySelector('.transcript')) el.querySelector('.player').insertAdjacentHTML('afterend', `<div class="transcript">📝 ${esc(text)}</div>`);
+    if (el && m.type === 'audio' && !el.querySelector('.transcript')) { el.querySelector('.tx-btn')?.remove(); el.querySelector('.player').insertAdjacentHTML('afterend', `<div class="transcript">📝 ${esc(text)}</div>`); }
   });
   socket.on('bot', (b) => {
     for (const c of S.chats) if (c.session_id === b.session_id && c.jid === b.jid) Object.assign(c, { paused_until: b.paused_until, needs_human: b.needs_human });
@@ -705,7 +705,7 @@ function msgHtml(m) {
     case 'image': body = `<img class="media" loading="lazy" src="${mediaUrl(m)}" alt="Foto">` + cap; break;
     case 'sticker': body = `<img class="media sticker" loading="lazy" src="${mediaUrl(m)}" alt="Sticker">`; break;
     case 'video': body = `<video controls preload="none" src="${mediaUrl(m)}"></video>` + cap; break;
-    case 'audio': body = playerHtml(m) + (m.text ? `<div class="transcript">📝 ${esc(m.text)}</div>` : ''); break;
+    case 'audio': body = playerHtml(m) + (m.text ? `<div class="transcript">📝 ${esc(m.text)}</div>` : (!m.from_me ? `<button class="btn sm ghost tx-btn" data-tx="${esc(m.id)}" style="margin-top:6px">📝 Transcribir</button>` : '')); break;
     case 'document': body = `<a class="doc" href="${mediaUrl(m)}?dl=1" target="_blank">${icon('doc')}<span>${esc(m.file_name || 'Documento')}</span>⬇</a>` + cap; break;
     case 'location': body = `<div class="txt">📍 ${linkify(m.text)}</div>`; break;
     case 'contact': body = `<div class="txt">👤 ${esc(m.text)}</div>`; break;
@@ -719,6 +719,12 @@ function bindMsgs(root) {
   root.querySelectorAll('img.media:not(.sticker)').forEach(img => img.onclick = () => { $('#lightbox img').src = img.src; $('#lightbox').classList.remove('hidden'); });
   root.querySelectorAll('img.media').forEach(img => img.onerror = () => { img.replaceWith(Object.assign(document.createElement('div'), { className: 'txt', textContent: '⚠️ No se pudo descargar el archivo' })); });
   root.querySelectorAll('.player').forEach(bindPlayer);
+  root.querySelectorAll('[data-tx]').forEach(b => b.onclick = async () => {
+    const m = S.msgs.find(x => x.id === b.dataset.tx); if (!m) return;
+    b.disabled = true; b.textContent = 'Transcribiendo…';
+    try { const r = await api('/api/ara/transcribe', { method: 'POST', body: { session: m.session_id, id: m.id } }); m.text = r.text; b.outerHTML = `<div class="transcript">📝 ${esc(r.text)}</div>`; }
+    catch (e) { b.disabled = false; b.textContent = '📝 Transcribir'; toast('✗ ' + e.message); }
+  });
 }
 $('#lightbox').onclick = () => $('#lightbox').classList.add('hidden');
 
@@ -1020,7 +1026,10 @@ async function openAra(tab = 'general') {
   const a = S.ara;
   $('#araEnabled').checked = !!a.enabled;
   $('#araKeyStatus').innerHTML = (a.status.anthropic ? '<span class="ok">✓ Clave de IA configurada</span>' : '<span class="bad">✗ Falta ANTHROPIC_API_KEY en las variables de Railway</span>')
-    + ' · ' + (a.status.openai ? '<span class="ok">✓ Escucha audios</span>' : '<span class="small">Para que entienda audios: agregá OPENAI_API_KEY</span>');
+    + ' · ' + (a.status.openai ? '<span class="ok">✓ Clave de audios cargada</span> <button class="btn sm ghost" id="testAudio">Probar clave de audios</button>' : '<span class="small">Para que entienda audios: agregá OPENAI_API_KEY</span>')
+    + (a.status.audioError ? `<div class="bad" style="margin-top:4px">Último error de audio: ${esc(a.status.audioError.error)}</div>` : '');
+  const ta = $('#testAudio');
+  if (ta) ta.onclick = async (e) => { e.preventDefault(); ta.textContent = 'Probando…'; try { await api('/api/ara/test-audio', { method: 'POST' }); ta.textContent = '✓ La clave funciona'; } catch (err) { ta.textContent = 'Probar clave de audios'; toast('✗ ' + err.message); } };
   $('#araTest').value = a.testNumbers || '';
   $('#araPause').value = a.pauseHours; $('#araDelay').value = a.delaySec; $('#araModel').value = a.model; $('#araSlot').value = a.maxPerSlot;
   $('#araSessions').innerHTML = S.sessions.map(s => `<label><input type="checkbox" value="${s.id}" ${a.sessions.includes(s.id) ? 'checked' : ''}> ${esc(s.name)}</label>`).join('') || '<span class="small">No hay celulares</span>';

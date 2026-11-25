@@ -289,29 +289,59 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
     ];
   }
 
-  async transcribe(sid, row) {
-    if (!process.env.OPENAI_API_KEY) return null;
+  openaiKey() {
+    return String(process.env.OPENAI_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+  }
+
+  // Transcribe un audio con OpenAI. Si falla, avisa en el panel y devuelve null (o tira el error si strict).
+  async transcribe(sid, row, { strict = false } = {}) {
+    const key = this.openaiKey();
+    if (!key) { if (strict) throw new Error('Falta la variable OPENAI_API_KEY en Railway'); return null; }
     const k = sid + '|' + row.id;
-    if (this.transcribing.has(k)) return this.transcribing.get(k);
-    const p = (async () => {
-      const r = await wa.downloadMedia(sid, row.id);
-      const buf = fs.readFileSync(path.join(DATA_DIR, 'media', r.media_file));
-      const fd = new FormData();
-      fd.append('file', new Blob([buf], { type: r.media_mime || 'audio/mpeg' }), 'audio.mp3');
-      fd.append('model', process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1');
-      fd.append('language', 'es');
-      const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST', headers: { Authorization: 'Bearer ' + process.env.OPENAI_API_KEY }, body: fd,
-      });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(d?.error?.message || 'Error al transcribir');
-      const text = (d.text || '').trim();
-      if (text) wa.setText(sid, row.id, text);
-      return text || null;
-    })().catch(e => { console.warn('Transcripción:', e.message); return null; })
-      .finally(() => setTimeout(() => this.transcribing.delete(k), 60000));
-    this.transcribing.set(k, p);
-    return p;
+    if (!this.transcribing.has(k)) {
+      const p = (async () => {
+        const r = await wa.downloadMedia(sid, row.id);
+        const file = path.join(DATA_DIR, 'media', r.media_file);
+        const buf = fs.readFileSync(file);
+        const ext = (path.extname(file).slice(1) || 'mp3').toLowerCase();
+        const mime = { mp3: 'audio/mpeg', ogg: 'audio/ogg', m4a: 'audio/mp4', mp4: 'audio/mp4', wav: 'audio/wav', webm: 'audio/webm' }[ext] || r.media_mime || 'audio/mpeg';
+        const fd = new FormData();
+        fd.append('file', new Blob([buf], { type: mime }), 'audio.' + (ext === 'oga' || ext === 'opus' ? 'ogg' : ext));
+        fd.append('model', process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1');
+        fd.append('language', 'es');
+        const res = await fetch((process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1') + '/audio/transcriptions', {
+          method: 'POST', headers: { Authorization: 'Bearer ' + key }, body: fd, signal: AbortSignal.timeout(60000),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(`OpenAI (${res.status}): ${d?.error?.message || 'error al transcribir'}`);
+        const text = (d.text || '').trim();
+        if (text) wa.setText(sid, row.id, text);
+        return text || '(audio sin palabras)';
+      })();
+      this.transcribing.set(k, p);
+      p.catch(() => {}).finally(() => setTimeout(() => this.transcribing.delete(k), 5000));
+    }
+    try {
+      return await this.transcribing.get(k);
+    } catch (e) {
+      console.warn('Transcripción:', e.message);
+      this.lastAudioError = { error: e.message, at: Date.now() };
+      if (strict) throw e;
+      if (!this._lastAudioToast || Date.now() - this._lastAudioToast > 60000) {
+        this._lastAudioToast = Date.now();
+        this.emit('araerror', { session_id: sid, jid: row.jid, error: 'No pude transcribir un audio. ' + e.message });
+      }
+      return null;
+    }
+  }
+
+  async testOpenAI() {
+    const key = this.openaiKey();
+    if (!key) throw new Error('Falta la variable OPENAI_API_KEY en Railway');
+    const res = await fetch((process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1') + '/models', { headers: { Authorization: 'Bearer ' + key }, signal: AbortSignal.timeout(20000) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`OpenAI (${res.status}): ${d?.error?.message || 'clave inválida'}`);
+    return { ok: true, modelos: (d.data || []).length };
   }
 
   // Últimos mensajes del chat en formato de la API
@@ -327,6 +357,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
         case 'audio': {
           let tx = r.text;
           if (!tx && !r.from_me) tx = await this.transcribe(sid, r);
+          if (tx === '(audio sin palabras)') tx = null;
           t = tx ? `[Audio] ${tx}` : '[Audio sin transcribir]';
           break;
         }
@@ -509,7 +540,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
       return;
     }
     // Audios: transcribir para el panel aunque ARA esté apagada (si hay clave de OpenAI)
-    if (m.type === 'audio' && !m.text && process.env.OPENAI_API_KEY) this.transcribe(sid, m);
+    if (m.type === 'audio' && !m.text && this.openaiKey()) this.transcribe(sid, m);
     if (m.ts < now() - 600) return;          // mensajes viejos que llegan al reconectar
     if (!this.canReply(sid, jid)) return;
     const k = sid + '|' + jid;
