@@ -316,6 +316,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
         if (!res.ok) throw new Error(`OpenAI (${res.status}): ${d?.error?.message || 'error al transcribir'}`);
         const text = (d.text || '').trim();
         if (text) wa.setText(sid, row.id, text);
+        console.log(`🎧 Audio transcripto (${row.seconds || '?'} s): ${text.slice(0, 80)}${text.length > 80 ? '…' : ''}`);
         return text || '(audio sin palabras)';
       })();
       this.transcribing.set(k, p);
@@ -324,7 +325,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
     try {
       return await this.transcribing.get(k);
     } catch (e) {
-      console.warn('Transcripción:', e.message);
+      console.warn('🎧 Audio NO transcripto:', e.message);
       this.lastAudioError = { error: e.message, at: Date.now() };
       if (strict) throw e;
       if (!this._lastAudioToast || Date.now() - this._lastAudioToast > 60000) {

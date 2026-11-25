@@ -162,7 +162,8 @@ wa.on('message', (data) => { try { ara.onMessage(data); } catch (e) { console.er
 
 server.listen(PORT, () => {
   console.log(`CRM WhatsApp en http://localhost:${PORT}  (datos en ${DATA_DIR})`);
-  if (!process.env.ANTHROPIC_API_KEY) console.warn('ℹ️  ARA necesita ANTHROPIC_API_KEY para responder');
+  console.log(process.env.ANTHROPIC_API_KEY ? '🤖 ARA: clave de IA cargada' : 'ℹ️  ARA necesita ANTHROPIC_API_KEY para responder');
+  console.log(ara.openaiKey() ? '🎧 Audios: clave de OpenAI cargada, ARA escucha los audios' : '🎧 Audios: falta OPENAI_API_KEY, ARA no puede escuchar audios');
   if (!process.env.PANEL_PASSWORD) console.warn('⚠️  Falta PANEL_PASSWORD: se usa la contraseña por defecto "cambiar123"');
   wa.startAll();
   startStockSync();
