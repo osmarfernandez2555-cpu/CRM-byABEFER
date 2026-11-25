@@ -367,6 +367,14 @@ select.inp{padding:8px 10px}
         <label class="field"><span>IA que responde</span><select class="inp" id="araModel"></select><span class="small" id="araModelInfo"></span></label>
         <label class="field"><span>Máximo de citas en el mismo horario</span><input class="inp" type="number" min="1" id="araSlot"></label>
       </div>
+      <div class="field"><span>Respuestas con audio</span>
+        <label class="checks"><label><input type="checkbox" id="voiceOn"> Si el cliente manda un audio, ARA responde con audio (hasta que vuelva a escribir)</label></label>
+        <div class="grid2">
+          <label class="field"><span>Voz de ARA</span><select class="inp" id="voiceName"></select></label>
+          <label class="field" style="grid-column:span 2"><span>Cómo tiene que hablar</span><input class="inp" id="voiceStyle" placeholder="Ej: Hablá en español de Argentina, tono cálido y simpático"></label>
+        </div>
+        <div class="small">Usa la voz de Gemini (GEMINI_API_KEY). Los links se mandan escritos después del audio. Probala en "Probar a ARA" marcando "El cliente manda audios".</div>
+      </div>
       <div class="field"><span>Horario de atención para citas (vacío = cerrado)</span><div class="grid2" id="araHorarios"></div></div>
     </div>
 
@@ -399,7 +407,7 @@ select.inp{padding:8px 10px}
     <div class="pane hidden" data-pane="sim">
       <div class="small">Escribí como si fueras un cliente. ARA responde con el entrenamiento actual (se guarda antes de cada prueba). En el simulador las citas y datos <b>no se guardan</b>.</div>
       <div class="sim"><div class="sim-msgs" id="simMsgs"></div>
-        <form class="sim-in" id="simForm"><input class="inp" id="simText" placeholder="Ej: Hola, quiero dejar mi Gol 2015 en consignación" autocomplete="off"><button class="btn">Enviar</button><button type="button" class="btn ghost" id="simReset">Reiniciar</button></form>
+        <form class="sim-in" id="simForm"><input class="inp" id="simText" placeholder="Ej: Hola, quiero dejar mi Gol 2015 en consignación" autocomplete="off"><label class="checks"><label title="ARA responde como si el cliente le hubiera mandado un audio"><input type="checkbox" id="simVoz"> 🎤 El cliente manda audios</label></label><button class="btn">Enviar</button><button type="button" class="btn ghost" id="simReset">Reiniciar</button></form>
       </div>
     </div>
 
@@ -1029,6 +1037,10 @@ async function openAra(tab = 'general') {
   $('#araTest').value = a.testNumbers || '';
   $('#araPause').value = a.pauseHours; $('#araDelay').value = a.delaySec; $('#araSlot').value = a.maxPerSlot;
   fillModels(a.model);
+  const VOCES = [['Kore', 'Kore — mujer, firme y clara'], ['Aoede', 'Aoede — mujer, liviana'], ['Leda', 'Leda — mujer, juvenil'], ['Zephyr', 'Zephyr — mujer, luminosa'], ['Callirrhoe', 'Callirrhoe — mujer, relajada'], ['Autonoe', 'Autonoe — mujer, brillante'], ['Despina', 'Despina — mujer, suave'], ['Erinome', 'Erinome — mujer, clara'], ['Laomedeia', 'Laomedeia — mujer, animada'], ['Achernar', 'Achernar — mujer, suave'], ['Gacrux', 'Gacrux — mujer, madura'], ['Pulcherrima', 'Pulcherrima — mujer, decidida'], ['Vindemiatrix', 'Vindemiatrix — mujer, amable'], ['Sulafat', 'Sulafat — mujer, cálida'], ['Puck', 'Puck — hombre, alegre'], ['Charon', 'Charon — hombre, informativo'], ['Fenrir', 'Fenrir — hombre, enérgico'], ['Orus', 'Orus — hombre, firme']];
+  $('#voiceName').innerHTML = VOCES.map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
+  if (!VOCES.some(([v]) => v === a.voiceName)) $('#voiceName').insertAdjacentHTML('beforeend', `<option value="${esc(a.voiceName)}">${esc(a.voiceName)}</option>`);
+  $('#voiceName').value = a.voiceName; $('#voiceOn').checked = !!a.voiceReplies; $('#voiceStyle').value = a.voiceStyle || '';
   $('#araSessions').innerHTML = S.sessions.map(s => `<label><input type="checkbox" value="${s.id}" ${a.sessions.includes(s.id) ? 'checked' : ''}> ${esc(s.name)}</label>`).join('') || '<span class="small">No hay celulares</span>';
   const dias = [[1, 'Lunes'], [2, 'Martes'], [3, 'Miércoles'], [4, 'Jueves'], [5, 'Viernes'], [6, 'Sábado'], [0, 'Domingo']];
   $('#araHorarios').innerHTML = dias.map(([i, n]) => `<label class="hrow"><span>${n}</span><input class="inp" data-dia="${i}" value="${esc(a.horarios[i] || '')}" placeholder="cerrado (ej: 09:00-18:00)"></label>`).join('');
@@ -1092,6 +1104,7 @@ function araForm() {
     pauseHours: +$('#araPause').value, delaySec: +$('#araDelay').value, model: $('#araModel').value, maxPerSlot: +$('#araSlot').value,
     horarios, instructions: $('#araInstr').value, knowledge: $('#araKnow').value,
     skills: S.ara.skills,
+    voiceReplies: $('#voiceOn').checked, voiceName: $('#voiceName').value, voiceStyle: $('#voiceStyle').value.trim(),
     stockEnabled: $('#stockEnabled').checked, stockUrl: $('#stockUrl').value.trim() || 'https://tutuautomotores.com',
     stockMinutes: Math.round((+$('#stockMin').value || 12) * 60), maxPhotos: +$('#stockPhotos').value, sendPhotos: $('#stockSend').checked,
   };
@@ -1196,7 +1209,9 @@ $('#skillAdd').onclick = () => {
 function renderSim(extra = '') {
   $('#simMsgs').innerHTML = (simConv.length ? '' : '<div class="act">Empezá escribiendo como cliente 👇</div>') + simConv.map(m => m.act
     ? `<div class="act ${m.err ? 'err' : ''}">${esc(m.act)}</div>`
-    : `<div class="msg ${m.role === 'user' ? 'out' : 'in'}">${m.role === 'assistant' ? '<div class="who" style="color:#5b3fd6">ARA</div>' : ''}${m.fotos ? `<div class="sim-photos">${m.fotos.map(f => `<img src="${esc(f)}" alt="">`).join('')}</div>` : ''}<div class="txt">${linkify(m.text)}</div></div>`).join('') + extra;
+    : m.audio ? `<div class="msg in"><div class="who" style="color:#5b3fd6">ARA 🎤</div>${playerHtml({ seconds: 0, ptt: 1 }, m.audio)}<div class="transcript">📝 ${esc(m.text)}</div></div>`
+    : `<div class="msg ${m.role === 'user' ? 'out' : 'in'}">${m.role === 'assistant' ? '<div class="who" style="color:#5b3fd6">ARA</div>' : ''}${m.voz ? '🎤 ' : ''}${m.fotos ? `<div class="sim-photos">${m.fotos.map(f => `<img src="${esc(f)}" alt="">`).join('')}</div>` : ''}<div class="txt">${linkify(m.text)}</div></div>`).join('') + extra;
+  $('#simMsgs').querySelectorAll('.player').forEach(bindPlayer);
   $('#simMsgs').scrollTop = $('#simMsgs').scrollHeight;
 }
 const NOMBRE_TOOL = { buscar_stock: '🔎 Buscar en el stock', enviar_fotos_auto: '📷 Enviar fotos del auto', agendar_cita: '📅 Agendar cita', cancelar_cita: '🗑 Cancelar cita', registrar_lead: '📝 Guardar datos del cliente', derivar_a_humano: '🙋 Pasar a un asesor' };
@@ -1204,11 +1219,12 @@ $('#simForm').onsubmit = async (e) => {
   e.preventDefault();
   const t = $('#simText').value.trim(); if (!t) return;
   $('#simText').value = '';
-  simConv.push({ role: 'user', text: t });
+  const voz = $('#simVoz').checked;
+  simConv.push({ role: 'user', text: t, voz });
   renderSim('<div class="act">ARA está escribiendo…</div>');
   try {
     await saveAra(true);
-    const r = await api('/api/ara/test', { method: 'POST', body: { conversation: simConv.filter(m => !m.act && !m.fotos) } });
+    const r = await api('/api/ara/test', { method: 'POST', body: { voz, conversation: simConv.filter(m => !m.act && !m.fotos).map(m => ({ role: m.role, text: m.voz ? '[Audio] ' + m.text : m.text })) } });
     for (const a of r.actions) {
       const det = Object.entries(a.input || {}).map(([k, v]) => `${k}: ${v}`).join(' · ');
       const extra = a.tool === 'buscar_stock' && a.result?.ok ? `\n→ ${a.result.total} resultado(s)` + (a.result.autos || []).slice(0, 4).map(x => `\n  • ${x.nombre} — ${x.precio}`).join('') : '';
@@ -1216,7 +1232,11 @@ $('#simForm').onsubmit = async (e) => {
       if (a.tool === 'enviar_fotos_auto' && a.result?.fotos) simConv.push({ role: 'assistant', text: a.result.caption, fotos: a.result.fotos });
     }
     if (r.silent) simConv.push({ act: 'ARA decidió no responder (no hacía falta)' });
-    for (const rep of r.replies) simConv.push({ role: 'assistant', text: rep });
+    if (voz && r.replies.length) {
+      if (r.audio) simConv.push({ role: 'assistant', text: r.replies[0], audio: r.audio });
+      else simConv.push({ act: '⚠️ No se pudo generar el audio: ' + (r.audioError || ''), err: true }, { role: 'assistant', text: r.replies[0] });
+      for (const l of r.replies.slice(1)) simConv.push({ role: 'assistant', text: l });
+    } else for (const rep of r.replies) simConv.push({ role: 'assistant', text: rep });
   } catch (err) { simConv.push({ act: '⚠️ ' + err.message, err: true }); }
   renderSim();
 };

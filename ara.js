@@ -6,6 +6,7 @@ import { q, DATA_DIR } from './db.js';
 import wa from './wa.js';
 import { DEFAULT_SKILLS, SKILL_TEXT_MAX, SKILL_FIXES } from './skills.js';
 import * as stock from './stock.js';
+import { pcmToWav, toMp3 } from './media.js';
 export { DEFAULT_SKILLS };
 
 const TZ = 'America/Argentina/Cordoba';
@@ -83,6 +84,9 @@ const DEFAULTS = {
   stockMinutes: 720,       // 12 horas
   sendPhotos: true,        // ARA puede mandar fotos de los autos
   maxPhotos: 3,
+  voiceReplies: true,      // si el cliente manda audio, ARA responde con audio
+  voiceName: 'Kore',
+  voiceStyle: 'Hablá en español de Argentina, con acento rioplatense, tono cálido, simpático y seguro, como una vendedora cordobesa con mucha onda',
   horarios: { 0: '', 1: '09:00-18:00', 2: '09:00-18:00', 3: '09:00-18:00', 4: '09:00-18:00', 5: '09:00-18:00', 6: '09:00-13:00' },
   instructions: DEFAULT_INSTRUCTIONS,
   knowledge: DEFAULT_KNOWLEDGE,
@@ -276,7 +280,11 @@ ${s.sendPhotos ? '- Si el cliente pide fotos o se interesa por una unidad concre
 
 HORARIO DE ATENCIÓN (para citas)
 ${horariosTexto(s.horarios)}`;
-    const dinamico = `=== AHORA ===
+    const voz = ctx.voz ? `=== MODO AUDIO ===
+El cliente te está hablando por audio, así que tu respuesta se va a convertir en una nota de voz con tu voz. Escribí como se habla: natural, cálido, frases cortas, sin emojis, sin listas, sin markdown ni símbolos. Los precios y números escribilos como se dicen ("veinte mil doscientos dólares", "ochenta y tres mil kilómetros"). Un solo mensaje, de 15 a 40 segundos hablado como máximo. No leas links en voz alta: si hace falta mandar un link, ponelo al final en una línea aparte que empiece con LINK: y se manda escrito.
+
+` : '';
+    const dinamico = voz + `=== AHORA ===
 Hoy es ${largo} (fecha ${iso}). Zona horaria de Córdoba.
 
 ${s.stockEnabled ? '=== STOCK EN LA WEB ===\n' + (stock.stockResumen() || 'El stock todavía no se cargó: si buscar_stock no devuelve nada, ofrecé que un asesor le pase las opciones.') + '\n\n' : ''}=== CLIENTE ===
@@ -419,20 +427,58 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
   geminiKey() { return String(process.env.GEMINI_API_KEY || '').trim().replace(/^["']|["']$/g, ''); }
 
   // Lista de modelos de Gemini disponibles para la clave (se guarda 6 horas)
-  async geminiModels() {
-    if (this._gm && Date.now() - this._gm.at < 6 * 3600 * 1000) return this._gm.list;
+  async geminiAll() {
+    if (this._gm && Date.now() - this._gm.at < 6 * 3600 * 1000) return this._gm.all;
     const key = this.geminiKey();
     if (!key) throw new Error('Falta la variable GEMINI_API_KEY en Railway');
     const base = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
     const res = await fetch(base + '/models?pageSize=1000', { headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(20000) });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(`Gemini (${res.status}): ${d?.error?.message || 'clave inválida'}`);
-    const list = (d.models || [])
+    const all = (d.models || [])
       .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
       .map(m => ({ id: m.name.replace(/^models\//, ''), nombre: m.displayName || m.name }))
-      .filter(m => /^gemini-/.test(m.id) && !/(image|tts|audio|live|embedding|vision|robotics|computer|native)/i.test(m.id));
-    this._gm = { at: Date.now(), list };
-    return list;
+      .filter(m => /^gemini-/.test(m.id));
+    this._gm = { at: Date.now(), all };
+    return all;
+  }
+
+  async geminiModels() {
+    return (await this.geminiAll()).filter(m => !/(image|tts|audio|live|embedding|vision|robotics|computer|native)/i.test(m.id));
+  }
+
+  // Modelo de voz (TTS) más nuevo disponible, preferentemente Flash
+  async geminiTtsModel() {
+    if (process.env.GEMINI_TTS_MODEL) return process.env.GEMINI_TTS_MODEL;
+    const list = (await this.geminiAll()).filter(m => /tts/i.test(m.id));
+    const ver = (id) => { const m = id.match(/^gemini-(\d+(?:\.\d+)?)/); return m ? +m[1] : 0; };
+    const sorted = list.sort((a, b) => (/flash/.test(b.id) - /flash/.test(a.id)) || ver(b.id) - ver(a.id));
+    if (!sorted[0]) throw new Error('Tu clave de Gemini no tiene modelos de voz (TTS) disponibles');
+    return sorted[0].id;
+  }
+
+  // Texto -> audio (WAV) con la voz de Gemini
+  async speak(text, s) {
+    const key = this.geminiKey();
+    if (!key) throw new Error('Falta GEMINI_API_KEY para que ARA hable');
+    const model = await this.geminiTtsModel();
+    const style = String(s.voiceStyle || '').trim().replace(/[:.\s]+$/, '');
+    const body = {
+      contents: [{ parts: [{ text: (style ? style + ':\n' : '') + text }] }],
+      generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: s.voiceName || 'Kore' } } } },
+    };
+    const base = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
+    const res = await fetch(`${base}/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST', headers: { 'x-goog-api-key': key, 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(90000),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`Voz Gemini ${model} (${res.status}): ${d?.error?.message || 'error'}`);
+    const part = (d.candidates?.[0]?.content?.parts || []).find(p => p.inlineData?.data);
+    if (!part) throw new Error('La voz de Gemini no devolvió audio');
+    const buf = Buffer.from(part.inlineData.data, 'base64');
+    const mime = part.inlineData.mimeType || '';
+    if (/l16|pcm/i.test(mime) || !mime) return pcmToWav(buf, +(mime.match(/rate=(\d+)/) || [])[1] || 24000);
+    return buf; // wav/mp3/ogg: ffmpeg lo reconoce solo
   }
 
   // "gemini-auto": el Flash estable más nuevo disponible
@@ -643,15 +689,33 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
       const history = await this.buildHistory(sid, jid);
       if (!history) return;
       const chat = q.getChat.get(sid, jid);
-      const ctx = { sid, jid, telefono: '+' + jid.split('@')[0], nombreWa: chat?.name || q.getContact.get(sid, jid)?.name };
-      await wa.typing(sid, jid, true);
+      const s0 = getSettings();
+      const ultimo = q.listMsgs.all(sid, jid, Number.MAX_SAFE_INTEGER, 30).find(r => !r.from_me);
+      const voz = !!(s0.voiceReplies && ultimo?.type === 'audio' && this.geminiKey());
+      const ctx = { sid, jid, voz, telefono: '+' + jid.split('@')[0], nombreWa: chat?.name || q.getContact.get(sid, jid)?.name };
+      await wa.typing(sid, jid, true, voz ? 'recording' : 'composing');
       const { text, actions } = await this.runAgent(ctx, history, false);
       if (actions.length) this.emit('actions', { session_id: sid, jid, actions });
       // Si mientras pensaba escribió una persona, no mandamos nada
       const b = q.getBot.get(sid, jid);
       const humanTookOver = b && b.paused_until > now() && b.reason === 'Respondió una persona';
       if (!text || text.includes('[SILENCIO]') || humanTookOver) { await wa.typing(sid, jid, false); return; }
-      const parts = splitMessages(text);
+      if (voz) {
+        const { hablado, links } = splitVoice(text);
+        try {
+          await wa.typing(sid, jid, true, 'recording');
+          const audio = await this.speak(hablado, s0);
+          await wa.sendVoice(sid, jid, audio, { byBot: true });
+          console.log(`🗣️ ARA respondió con audio (${hablado.length} caracteres)`);
+          for (const l of links) await wa.sendText(sid, jid, l, { byBot: true });
+          await wa.typing(sid, jid, false);
+          return;
+        } catch (e) {
+          console.warn('🗣️ No se pudo generar el audio, respondo por texto:', e.message);
+          this.emit('araerror', { session_id: sid, jid, error: 'No pude responder con audio (mandé texto). ' + e.message });
+        }
+      }
+      const parts = splitMessages(text.replace(/^LINK:\s*/gim, ''));
       for (let i = 0; i < parts.length; i++) {
         await wa.typing(sid, jid, true);
         await sleep(Math.min(4500, 900 + parts[i].length * 22));
@@ -669,7 +733,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
   }
 
   // Simulador del panel: misma ARA, sin WhatsApp y sin guardar nada
-  async simulate(conversation) {
+  async simulate(conversation, { voz = false } = {}) {
     const turns = [];
     for (const m of conversation || []) {
       const role = m.role === 'assistant' ? 'assistant' : 'user';
@@ -681,9 +745,16 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
     }
     while (turns.length && turns[0].role !== 'user') turns.shift();
     if (!turns.length || turns.at(-1).role !== 'user') throw new Error('Escribí un mensaje como cliente');
-    const { text, actions } = await this.runAgent({ sid: 'sim', jid: 'sim', telefono: '+5493510000000', nombreWa: 'Cliente de prueba' }, turns, true);
+    const { text, actions } = await this.runAgent({ sid: 'sim', jid: 'sim', voz, telefono: '+5493510000000', nombreWa: 'Cliente de prueba' }, turns, true);
     const silent = !text || text.includes('[SILENCIO]');
-    return { replies: silent ? [] : splitMessages(text), silent, actions };
+    if (!silent && voz) {
+      const { hablado, links } = splitVoice(text);
+      let audio = null, audioError = null;
+      try { audio = 'data:audio/mpeg;base64,' + (await toMp3(await this.speak(hablado, getSettings()))).toString('base64'); }
+      catch (e) { audioError = e.message; }
+      return { replies: [hablado, ...links], audio, audioError, silent, actions };
+    }
+    return { replies: silent ? [] : splitMessages(text.replace(/^LINK:\s*/gim, '')), silent, actions };
   }
 
   setChat(sid, jid, action) {
@@ -700,6 +771,19 @@ function habilidadesTexto(skills) {
   if (!on.length) return '';
   return '=== HABILIDADES DE VENTA (aplicalas en cada conversación) ===\n\n'
     + on.map(x => `### ${x.nombre}\n${x.texto.trim()}`).join('\n\n') + '\n\n';
+}
+
+// Separa lo que se dice en voz alta de los links (que van escritos)
+function splitVoice(text) {
+  const links = [];
+  const lines = text.replace(/\*\*?|#+\s*/g, '').split('\n').filter(l => {
+    const m = l.match(/^\s*LINK:\s*(.+)$/i);
+    if (m) { links.push(m[1].trim()); return false; }
+    return true;
+  });
+  let hablado = lines.join(' ').replace(/https?:\/\/\S+/g, (u) => { links.push(u); return ''; }).replace(/\s+/g, ' ').trim();
+  if (!hablado) hablado = 'Te paso la info por acá.';
+  return { hablado: hablado.slice(0, 1500), links: [...new Set(links)] };
 }
 
 function splitMessages(text) {

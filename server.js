@@ -116,7 +116,7 @@ app.put('/api/ara/settings', guard, wrap(async (req, res) => {
   io.emit('arasettings', { enabled: st.enabled });
   res.json(st);
 }));
-app.post('/api/ara/test', guard, wrap(async (req, res) => res.json(await ara.simulate(req.body?.conversation))));
+app.post('/api/ara/test', guard, wrap(async (req, res) => res.json(await ara.simulate(req.body?.conversation, { voz: !!req.body?.voz }))));
 app.post('/api/ara/chat', guard, wrap(async (req, res) => res.json(ara.setChat(req.body.session, req.body.jid, req.body.action))));
 app.get('/api/ara/chat', guard, (req, res) => res.json(q.getBot.get(req.query.session, req.query.jid) || { paused_until: 0, needs_human: 0 }));
 app.get('/api/ara/citas', guard, (req, res) => res.json(q.listCitas.all()));
@@ -173,6 +173,7 @@ server.listen(PORT, () => {
   const audio = ara.audioProvider();
   console.log(audio ? `🎧 Audios: ARA escucha con ${audio.name} (${audio.model})` : '🎧 Audios: falta GROQ_API_KEY, ARA no puede escuchar audios');
   const st = getSettings();
+  console.log(ara.geminiKey() ? `🗣️ Voz: si el cliente manda audio, ARA responde con audio (voz ${st.voiceName})${st.voiceReplies ? '' : ' [apagado]'}` : '🗣️ Voz: falta GEMINI_API_KEY para responder con audio');
   console.log(`🧠 ARA responde con: ${/^gemini/.test(st.model) ? 'Gemini (' + st.model + ')' : 'Claude (' + st.model + ')'}`);
   if (!process.env.PANEL_PASSWORD) console.warn('⚠️  Falta PANEL_PASSWORD: se usa la contraseña por defecto "cambiar123"');
   wa.startAll();

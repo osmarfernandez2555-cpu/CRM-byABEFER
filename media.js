@@ -47,3 +47,13 @@ export function durationOf(buf) {
     p.stdin.end(buf);
   });
 }
+
+// Audio PCM crudo (16 bits, mono) -> WAV, para pasarlo después a nota de voz
+export function pcmToWav(pcm, rate = 24000, channels = 1) {
+  const h = Buffer.alloc(44);
+  h.write('RIFF', 0); h.writeUInt32LE(36 + pcm.length, 4); h.write('WAVE', 8);
+  h.write('fmt ', 12); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(channels, 22);
+  h.writeUInt32LE(rate, 24); h.writeUInt32LE(rate * channels * 2, 28); h.writeUInt16LE(channels * 2, 32); h.writeUInt16LE(16, 34);
+  h.write('data', 36); h.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([h, pcm]);
+}

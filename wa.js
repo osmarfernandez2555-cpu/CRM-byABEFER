@@ -352,10 +352,10 @@ class WAManager extends EventEmitter {
   }
 
   // "Escribiendo..." en el celular del cliente
-  async typing(sid, jid, on) {
+  async typing(sid, jid, on, mode = 'composing') {
     const s = this.sessions.get(sid);
     if (s?.status !== 'open') return;
-    try { await s.sock.sendPresenceUpdate(on ? 'composing' : 'paused', jid); } catch {}
+    try { await s.sock.sendPresenceUpdate(on ? mode : 'paused', jid); } catch {}
   }
 
   setText(sid, id, text) {
@@ -363,12 +363,13 @@ class WAManager extends EventEmitter {
     this.emit('msgupdate', { sessionId: sid, id, text });
   }
 
-  async sendVoice(sid, jid, recorded) {
+  async sendVoice(sid, jid, recorded, { byBot } = {}) {
     const sock = this.sockOf(sid);
     const ogg = await toVoiceNote(recorded);
     const seconds = await durationOf(ogg);
     const messageId = generateMessageIDV2(sock.user?.id);
     this.skipDownload.add(messageId);
+    if (byBot) { this.botIds.add(messageId); setTimeout(() => this.botIds.delete(messageId), 10 * 60 * 1000); }
     const sent = await sock.sendMessage(jid, { audio: ogg, mimetype: 'audio/ogg; codecs=opus', ptt: true, seconds }, { messageId });
     return this.afterSend(sid, sock, sent, ogg);
   }
