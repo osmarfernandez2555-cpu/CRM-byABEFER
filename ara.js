@@ -4,6 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import { q, DATA_DIR } from './db.js';
 import wa from './wa.js';
+import { DEFAULT_SKILLS, SKILL_TEXT_MAX } from './skills.js';
+export { DEFAULT_SKILLS };
 
 const TZ = 'America/Argentina/Cordoba';
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -79,17 +81,45 @@ const DEFAULTS = {
   horarios: { 0: '', 1: '09:00-18:00', 2: '09:00-18:00', 3: '09:00-18:00', 4: '09:00-18:00', 5: '09:00-18:00', 6: '09:00-13:00' },
   instructions: DEFAULT_INSTRUCTIONS,
   knowledge: DEFAULT_KNOWLEDGE,
+  skills: DEFAULT_SKILLS.map(sk => ({ ...sk, enabled: true, builtin: true })),
 };
 
 export function getSettings() {
   let saved = {};
   try { saved = JSON.parse(q.getSetting.get('ara')?.value || '{}'); } catch {}
-  return { ...DEFAULTS, ...saved, horarios: { ...DEFAULTS.horarios, ...(saved.horarios || {}) } };
+  const def = JSON.parse(JSON.stringify(DEFAULTS)); // copia: nunca modificar los valores por defecto
+  const st = { ...def, ...saved, horarios: { ...def.horarios, ...(saved.horarios || {}) } };
+  if (Array.isArray(saved.skills)) {
+    // habilidades nuevas que vengan en futuras versiones se agregan solas
+    const ids = new Set(saved.skills.map(x => x.id));
+    st.skills = [...saved.skills, ...def.skills.filter(x => !ids.has(x.id))];
+  }
+  return st;
+}
+
+function cleanSkills(list) {
+  if (!Array.isArray(list)) return undefined;
+  const builtinIds = new Set(DEFAULT_SKILLS.map(x => x.id));
+  const seen = new Set();
+  return list.slice(0, 40).map((x, i) => {
+    let id = String(x.id || '').replace(/[^a-z0-9-]/gi, '').slice(0, 40) || 'propia-' + Date.now().toString(36) + i;
+    if (seen.has(id)) id += '-' + i;
+    seen.add(id);
+    return {
+      id,
+      nombre: String(x.nombre || 'Habilidad').slice(0, 80),
+      descripcion: String(x.descripcion || '').slice(0, 200),
+      texto: String(x.texto || '').slice(0, SKILL_TEXT_MAX),
+      enabled: !!x.enabled,
+      builtin: builtinIds.has(id),
+    };
+  }).filter(x => x.texto.trim() || x.builtin);
 }
 export function saveSettings(patch) {
   const allowed = Object.keys(DEFAULTS);
   const cur = getSettings();
   for (const k of allowed) if (patch[k] !== undefined) cur[k] = patch[k];
+  if (patch.skills !== undefined) cur.skills = cleanSkills(patch.skills) || cur.skills;
   cur.pauseHours = Math.max(0, +cur.pauseHours || 0);
   cur.delaySec = Math.min(60, Math.max(2, +cur.delaySec || 8));
   cur.maxPerSlot = Math.max(1, +cur.maxPerSlot || 3);
@@ -196,7 +226,7 @@ class Ara extends EventEmitter {
 === CONOCIMIENTO (única fuente de datos de stock, precios y condiciones) ===
 ${s.knowledge}
 
-=== REGLAS FIJAS ===
+${habilidadesTexto(s.skills)}=== REGLAS FIJAS (tienen prioridad sobre todo lo anterior) ===
 - No inventes precios, stock, tasas, cuotas ni condiciones. Si algo no está en CONOCIMIENTO, decí que lo confirmás con un asesor y ofrecé una cita o usá derivar_a_humano.
 - Usá registrar_lead cada vez que el cliente te dé datos útiles (nombre, interés, presupuesto, usado, financiación).
 - Para agendar usá agendar_cita solo después de que el cliente confirme día y hora. Después de registrarla, confirmale día, hora y la dirección.
@@ -481,6 +511,13 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
     this.emit('bot', st);
     return st;
   }
+}
+
+function habilidadesTexto(skills) {
+  const on = (skills || []).filter(x => x.enabled && x.texto?.trim());
+  if (!on.length) return '';
+  return '=== HABILIDADES DE VENTA (aplicalas en cada conversación) ===\n\n'
+    + on.map(x => `### ${x.nombre}\n${x.texto.trim()}`).join('\n\n') + '\n\n';
 }
 
 function splitMessages(text) {

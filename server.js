@@ -9,7 +9,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { q, DATA_DIR } from './db.js';
 import wa from './wa.js';
-import ara, { getSettings, saveSettings, DEFAULT_INSTRUCTIONS, DEFAULT_KNOWLEDGE } from './ara.js';
+import ara, { getSettings, saveSettings, DEFAULT_INSTRUCTIONS, DEFAULT_KNOWLEDGE, DEFAULT_SKILLS } from './ara.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -22,7 +22,7 @@ const server = http.createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 1e6 });
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 64 * 1024 * 1024 } });
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
 
 const authed = (req) => req.cookies?.crm_token === TOKEN;
@@ -108,7 +108,7 @@ app.get('/media/:sid/:id', guard, wrap(async (req, res) => {
 app.get('/api/ara/settings', guard, (req, res) => res.json({
   ...getSettings(),
   status: { anthropic: !!process.env.ANTHROPIC_API_KEY, openai: !!process.env.OPENAI_API_KEY },
-  defaults: { instructions: DEFAULT_INSTRUCTIONS, knowledge: DEFAULT_KNOWLEDGE },
+  defaults: { instructions: DEFAULT_INSTRUCTIONS, knowledge: DEFAULT_KNOWLEDGE, skills: DEFAULT_SKILLS },
 }));
 app.put('/api/ara/settings', guard, wrap(async (req, res) => {
   const st = saveSettings(req.body || {});

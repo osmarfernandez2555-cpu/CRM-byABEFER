@@ -206,6 +206,14 @@ select.inp{padding:8px 10px}
 .bot-tag{font-size:10.5px;font-weight:700;color:#5b3fd6;margin-right:2px}
 .transcript{font-size:12.5px;color:#46525c;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(0,0,0,.12);white-space:pre-wrap}
 
+.skill{border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px}
+.skill.off{opacity:.6}
+.skill-top{display:flex;gap:12px;align-items:flex-start}
+.skill-top .switch{padding:0;background:none;border:0}
+.skill-top .t{flex:1;min-width:0}
+.skill-top .t b{display:block}
+.skill textarea{min-height:260px}
+.chipb{font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;background:#ede8ff;color:#4a33b8;margin-left:6px;vertical-align:middle}
 /* ---------- Celular ---------- */
 @media (max-width:860px){
   #app{grid-template-columns:58px 1fr}
@@ -332,6 +340,7 @@ select.inp{padding:8px 10px}
     <div class="tabs">
       <button class="tab on" data-tab="general">General</button>
       <button class="tab" data-tab="train">Entrenamiento</button>
+      <button class="tab" data-tab="skills">Habilidades</button>
       <button class="tab" data-tab="sim">Probar a ARA</button>
       <button class="tab" data-tab="citas">Citas</button>
       <button class="tab" data-tab="leads">Clientes</button>
@@ -360,6 +369,14 @@ select.inp{padding:8px 10px}
       <div class="small">Así "entrenás" a ARA: todo lo que escribas acá es lo que sabe y cómo se comporta. Completá los <b>[COMPLETAR]</b> con datos reales; ARA nunca inventa precios ni stock que no estén en Conocimiento.</div>
       <div class="field"><span>Personalidad e instrucciones de venta <button class="btn sm ghost" data-reset="instructions">Restaurar ejemplo</button></span><textarea class="inp big" id="araInstr"></textarea></div>
       <div class="field"><span>Conocimiento: empresa, stock, financiación, consignación, promos <button class="btn sm ghost" data-reset="knowledge">Restaurar ejemplo</button></span><textarea class="inp big" id="araKnow"></textarea></div>
+    </div>
+
+    <div class="pane hidden" data-pane="skills">
+      <div class="top" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+        <div class="small">Técnicas de venta que ARA aplica en cada chat. Prendé, apagá o editá las que quieras, o creá las tuyas.<br>Basadas en <a href="https://github.com/TheCraigHewitt/sales-skills" target="_blank" rel="noopener">sales-skills</a> de Craig Hewitt, adaptadas a la venta de autos por WhatsApp.</div>
+        <button class="btn sm" id="skillAdd" style="background:#5b3fd6">+ Nueva habilidad</button>
+      </div>
+      <div id="skillsList" style="display:grid;gap:10px"></div>
     </div>
 
     <div class="pane hidden" data-pane="sim">
@@ -997,7 +1014,8 @@ function showAraTab(t) {
   araTab = t;
   document.querySelectorAll('#araModal .tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   document.querySelectorAll('#araModal .pane').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== t));
-  $('#araSavebar').classList.toggle('hidden', !['general', 'train'].includes(t));
+  $('#araSavebar').classList.toggle('hidden', !['general', 'train', 'skills'].includes(t));
+  if (t === 'skills') renderSkills();
   if (t === 'citas') loadCitas();
   if (t === 'leads') loadLeads();
   if (t === 'sim') { renderSim(); $('#simText').focus(); }
@@ -1020,6 +1038,7 @@ function araForm() {
     sessions: [...document.querySelectorAll('#araSessions input:checked')].map(i => i.value),
     pauseHours: +$('#araPause').value, delaySec: +$('#araDelay').value, model: $('#araModel').value, maxPerSlot: +$('#araSlot').value,
     horarios, instructions: $('#araInstr').value, knowledge: $('#araKnow').value,
+    skills: S.ara.skills,
   };
 }
 async function saveAra(silent) {
@@ -1031,6 +1050,63 @@ async function saveAra(silent) {
   if (!silent) { $('#araSaved').textContent = '✓ Guardado ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }); toast(st.enabled ? '🤖 ARA activa' + (st.testNumbers ? ' (modo prueba)' : '') : 'Cambios guardados'); }
 }
 $('#araSave').onclick = () => saveAra().catch(e => toast(e.message));
+
+// ---- Habilidades ----
+const openSkills = new Set();
+function renderSkills() {
+  const list = S.ara.skills || [];
+  const on = list.filter(x => x.enabled).length;
+  $('#skillsList').innerHTML = `<div class="small"><b>${on}</b> de ${list.length} habilidades activas</div>` + list.map((k, i) => `
+    <div class="skill ${k.enabled ? '' : 'off'}" data-i="${i}">
+      <div class="skill-top">
+        <label class="switch"><input type="checkbox" data-f="enabled" ${k.enabled ? 'checked' : ''}></label>
+        <div class="t"><b>${esc(k.nombre)}${k.builtin ? '' : '<span class="chipb">PROPIA</span>'}</b><span class="small">${esc(k.descripcion || '')}</span></div>
+        <button class="btn sm ghost" data-act="toggle">${openSkills.has(k.id) ? 'Cerrar' : 'Ver / editar'}</button>
+      </div>
+      ${openSkills.has(k.id) ? `
+        <input class="inp" data-f="nombre" value="${esc(k.nombre)}" placeholder="Nombre">
+        <input class="inp" data-f="descripcion" value="${esc(k.descripcion || '')}" placeholder="Para qué sirve (una línea)">
+        <textarea class="inp big" data-f="texto" placeholder="Explicale a ARA cómo aplicar esta habilidad, con ejemplos de frases.">${esc(k.texto)}</textarea>
+        <div class="sess-actions">
+          ${k.builtin ? '<button class="btn sm ghost" data-act="restore">Restaurar original</button>' : '<button class="btn sm danger" data-act="delete">Eliminar</button>'}
+        </div>` : ''}
+    </div>`).join('');
+  $('#skillsList').querySelectorAll('.skill').forEach(card => {
+    const k = S.ara.skills[+card.dataset.i];
+    card.querySelectorAll('[data-f]').forEach(inp => {
+      const ev = inp.type === 'checkbox' ? 'change' : 'input';
+      inp.addEventListener(ev, () => {
+        k[inp.dataset.f] = inp.type === 'checkbox' ? inp.checked : inp.value;
+        if (inp.type === 'checkbox') renderSkills();
+        $('#araSaved').textContent = 'Cambios sin guardar';
+      });
+    });
+    card.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
+      const a = b.dataset.act;
+      if (a === 'toggle') { openSkills.has(k.id) ? openSkills.delete(k.id) : openSkills.add(k.id); }
+      if (a === 'restore' && confirm('¿Volver al texto original de esta habilidad?')) {
+        const d = S.ara.defaults.skills.find(x => x.id === k.id);
+        if (d) Object.assign(k, { nombre: d.nombre, descripcion: d.descripcion, texto: d.texto });
+        $('#araSaved').textContent = 'Cambios sin guardar';
+      }
+      if (a === 'delete' && confirm(`¿Eliminar la habilidad "${k.nombre}"?`)) {
+        S.ara.skills.splice(+card.dataset.i, 1);
+        $('#araSaved').textContent = 'Cambios sin guardar';
+      }
+      renderSkills();
+    });
+  });
+}
+$('#skillAdd').onclick = () => {
+  const id = 'propia-' + Date.now().toString(36);
+  S.ara.skills = [...(S.ara.skills || []), { id, nombre: 'Nueva habilidad', descripcion: '', texto: '', enabled: true, builtin: false }];
+  openSkills.add(id);
+  renderSkills();
+  const cards = $('#skillsList').querySelectorAll('.skill');
+  const last = cards[cards.length - 1];
+  last.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  last.querySelector('[data-f=nombre]').select();
+};
 
 // ---- Simulador ----
 function renderSim(extra = '') {
