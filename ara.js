@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { q, DATA_DIR } from './db.js';
 import wa from './wa.js';
-import { DEFAULT_SKILLS, SKILL_TEXT_MAX } from './skills.js';
+import { DEFAULT_SKILLS, SKILL_TEXT_MAX, SKILL_FIXES } from './skills.js';
 import * as stock from './stock.js';
 export { DEFAULT_SKILLS };
 
@@ -62,7 +62,7 @@ FINANCIACIÓN
 - No informar tasas ni cuotas exactas si no están acá: se calculan con el asesor.
 
 CONSIGNACIÓN
-- [COMPLETAR] Cómo funciona, comisión, tiempo mínimo, quién paga la publicidad, qué documentación tiene que traer (título, cédula, 08, VTV, informe de dominio...).
+- [COMPLETAR] Cómo funciona, comisión, tiempo mínimo, quién paga la publicidad, qué documentación hace falta para la venta (título, cédula, 08, VTV, informe de dominio...) y cuál gestiona Tutu.
 
 TOMA DE USADOS
 - Se aceptan usados como parte de pago, previa tasación presencial. [COMPLETAR: condiciones]
@@ -99,6 +99,7 @@ export function getSettings() {
     // habilidades nuevas que vengan en futuras versiones se agregan solas
     const ids = new Set(saved.skills.map(x => x.id));
     st.skills = [...saved.skills, ...def.skills.filter(x => !ids.has(x.id))];
+    for (const sk of st.skills) for (const [viejo, nuevo] of SKILL_FIXES) if (sk.texto?.includes(viejo)) sk.texto = sk.texto.replace(viejo, nuevo);
   }
   return st;
 }
@@ -266,6 +267,7 @@ ${habilidadesTexto(s.skills)}=== REGLAS FIJAS (tienen prioridad sobre todo lo an
 ${s.stockEnabled ? `- STOCK: antes de recomendar un auto o dar un precio, usá buscar_stock. Lo que devuelve es el stock real y actualizado de la web, y manda sobre cualquier stock escrito en CONOCIMIENTO. Nunca ofrezcas un auto que no aparezca ahí. Cuando recomiendes una unidad, pasá el link de la publicación. Mostrá como mucho 3 opciones por mensaje.
 ${s.sendPhotos ? '- Si el cliente pide fotos o se interesa por una unidad concreta, usá enviar_fotos_auto (las fotos se mandan solas; después no repitas el link).\n' : ''}` : ''}- Usá registrar_lead cada vez que el cliente te dé datos útiles (nombre, interés, presupuesto, usado, financiación).
 - Para agendar usá agendar_cita solo después de que el cliente confirme día y hora. Después de registrarla, confirmale día, hora y la dirección.
+- NUNCA le pidas al cliente que traiga algo a la cita (título, cédula, 08, VTV, informe de dominio, DNI, recibos, llaves, ni ningún papel) ni que mande fotos o documentos antes. Solo tiene que venir. Si viene al caso, podés contarle la documentación como parte del proceso ("la transferencia y los papeles los vemos nosotros en la agencia"), pero sin pedirle nada.
 - Si te preguntan si sos un bot, una IA o una persona, respondé con la verdad: sos ARA, la asistente virtual de Tutu Automotores, y podés pasarlo con un asesor cuando quiera.
 - Formato WhatsApp: texto plano, sin markdown (nada de **, #, ni tablas). Máximo 3 mensajes cortos, separados por una línea en blanco. Emojis con moderación.
 - Si el último mensaje del cliente no necesita respuesta (por ejemplo un "ok" o un "gracias" después de despedirse), respondé exactamente: [SILENCIO]

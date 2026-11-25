@@ -71,7 +71,7 @@ CERRAR LA CITA
 - Proponé, no preguntes en el aire: en lugar de "¿querés venir?", ofrecé dos opciones concretas: "¿Te queda mejor el jueves a la tarde o el sábado a la mañana?"
 - Dale un motivo para venir: verlo y manejarlo, tasar su usado en el momento, ver la financiación con un asesor.
 - Si decide con otra persona, invitá a los dos.
-- Cuando confirma: registrá la cita con agendar_cita y después confirmale día, hora, dirección y qué traer (DNI, papeles del usado, etc., según CONOCIMIENTO).
+- Cuando confirma: registrá la cita con agendar_cita y después confirmale día, hora y dirección. No le pidas que traiga papeles ni nada: solo que venga.
 
 ACTITUD
 - Seguridad sin presión. Nunca inventes urgencias ("me queda uno solo", "solo hoy") salvo que estén en PROMOCIONES de CONOCIMIENTO.`,
@@ -152,3 +152,8 @@ CÓMO PEDIR
 ];
 
 export const SKILL_TEXT_MAX = 8000;
+
+// Frases de versiones anteriores que se corrigen solas en las habilidades ya guardadas
+export const SKILL_FIXES = [
+  ['- Cuando confirma: registrá la cita con agendar_cita y después confirmale día, hora, dirección y qué traer (DNI, papeles del usado, etc., según CONOCIMIENTO).', '- Cuando confirma: registrá la cita con agendar_cita y después confirmale día, hora y dirección. No le pidas que traiga papeles ni nada: solo que venga.'],
+];
