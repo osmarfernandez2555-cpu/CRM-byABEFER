@@ -1047,7 +1047,7 @@ async function openAra(tab = 'general') {
   $('#voiceName').innerHTML = VOCES.map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
   if (!VOCES.some(([v]) => v === a.voiceName)) $('#voiceName').insertAdjacentHTML('beforeend', `<option value="${esc(a.voiceName)}">${esc(a.voiceName)}</option>`);
   $('#credOn').checked = !!a.creditEnabled; $('#ruthinaUrl').value = a.ruthinaUrl || '';
-  $('#credStatus').innerHTML = a.status.ruthinaKey ? '<span class="ok">✓ Clave RUTHINA_BOT_KEY cargada</span> · ARA nunca le dice montos al cliente; si no califica, le pide otro DNI.' : '<span class="bad">✗ Falta la variable RUTHINA_BOT_KEY en Railway (copiá la misma que tiene Ruthina)</span>';
+  $('#credStatus').innerHTML = a.status.ruthinaKey ? '<span class="ok">✓ Clave RUTHINA_BOT_KEY cargada</span> · ARA nunca le dice montos ni bancos: solo \"¡Felicitaciones! Tenés crédito aprobado\" y agenda la cita; si no califica, le pide otro DNI.' : '<span class="bad">✗ Falta la variable RUTHINA_BOT_KEY en Railway (copiá la misma que tiene Ruthina)</span>';
   $('#voiceName').value = a.voiceName; $('#voiceOn').checked = !!a.voiceReplies; $('#voiceStyle').value = a.voiceStyle || '';
   $('#araSessions').innerHTML = S.sessions.map(s => `<label><input type="checkbox" value="${s.id}" ${a.sessions.includes(s.id) ? 'checked' : ''}> ${esc(s.name)}</label>`).join('') || '<span class="small">No hay celulares</span>';
   const dias = [[1, 'Lunes'], [2, 'Martes'], [3, 'Miércoles'], [4, 'Jueves'], [5, 'Viernes'], [6, 'Sábado'], [0, 'Domingo']];
@@ -1241,7 +1241,7 @@ $('#simForm').onsubmit = async (e) => {
     const r = await api('/api/ara/test', { method: 'POST', body: { voz, conversation: simConv.filter(m => !m.act && !m.fotos).map(m => ({ role: m.role, text: m.voz ? '[Audio] ' + m.text : m.text })) } });
     for (const a of r.actions) {
       const det = Object.entries(a.input || {}).map(([k, v]) => `${k}: ${v}`).join(' · ');
-      const extra = a.tool === 'calificar_credito' && a.result?.ok ? `\n→ ${a.result.respuesta_final ? (a.result.tiene_credito ? '✓ Tiene crédito' + (a.result.bancos_aprobados.length ? ' (' + a.result.bancos_aprobados.join(', ') + ')' : '') : a.result.califica === false ? '✗ No califica' : 'A revisar por un asesor') : '⏳ Pendiente (los bancos siguen respondiendo)'}`
+      const extra = a.tool === 'calificar_credito' && a.result?.ok ? `\n→ ${a.result.respuesta_final ? (a.result.tiene_credito ? '✓ Tiene crédito aprobado' : a.result.califica === false ? '✗ No califica' : 'A revisar por un asesor') : '⏳ Pendiente (los bancos siguen respondiendo)'}`
         : a.tool === 'buscar_stock' && a.result?.ok ? `\n→ ${a.result.total} resultado(s)` + (a.result.autos || []).slice(0, 4).map(x => `\n  • ${x.nombre} — ${x.precio}`).join('') : '';
       simConv.push({ act: `${NOMBRE_TOOL[a.tool] || a.tool}${det ? '\n' + det : ''}${extra}${a.result?.ok === false ? '\n✗ ' + a.result.error : ''}`, err: a.result?.ok === false });
       if (a.tool === 'enviar_fotos_auto' && a.result?.fotos) simConv.push({ role: 'assistant', text: a.result.caption, fotos: a.result.fotos });

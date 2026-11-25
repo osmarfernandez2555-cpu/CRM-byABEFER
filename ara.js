@@ -290,7 +290,7 @@ ${habilidadesTexto(s.skills)}=== REGLAS FIJAS (tienen prioridad sobre todo lo an
 - No inventes precios, stock, tasas, cuotas ni condiciones. Si algo no está en CONOCIMIENTO, decí que lo confirmás con un asesor y ofrecé una cita o usá derivar_a_humano.
 ${s.stockEnabled ? `- STOCK: antes de recomendar un auto o dar un precio, usá buscar_stock. Lo que devuelve es el stock real y actualizado de la web, y manda sobre cualquier stock escrito en CONOCIMIENTO. Nunca ofrezcas un auto que no aparezca ahí. Cuando recomiendes una unidad, pasá el link de la publicación. Mostrá como mucho 3 opciones por mensaje.
 ${s.sendPhotos ? '- Si el cliente pide fotos o se interesa por una unidad concreta, usá enviar_fotos_auto (las fotos se mandan solas; después no repitas el link).\n' : ''}` : ''}${credito.ruthinaConfig(s).listo ? `- CRÉDITO: si el cliente quiere financiar o pregunta si le dan crédito, ofrecé consultarlo en el momento, sin compromiso: pedile el DNI del titular y consultalo con calificar_credito. El sexo del titular deducilo del nombre; si no te das cuenta, preguntalo con naturalidad.
-- Nunca digas montos, cuotas, tasas ni qué bancos rechazaron. Si tiene crédito: decile que tiene crédito disponible (podés nombrar los bancos aprobados) y llevalo a una cita para armar la propuesta con un asesor.
+- Nunca digas montos, cuotas, tasas ni nombres de bancos (ni los que aprobaron ni los que rechazaron). Si tiene crédito, decile: "¡Felicitaciones, [nombre]! Tenés crédito aprobado" y enseguida tratá de agendar la cita en el Polo 52, ofreciendo dos opciones concretas de día y horario.
 - Si NO califica: decíselo con tacto, sin culpas, y pedile el DNI de otra persona de su entorno (pareja, familiar) que pueda ser titular o garante; consultalo con calificar_credito con rol "segundo". Si ese tampoco califica, ofrecé otras opciones (contado, permuta) y una cita con un asesor.
 - Si la consulta queda pendiente, decile que lo estás consultando con los bancos y que le escribís en unos minutos. El sistema te avisa cuando llega el resultado. Nunca inventes un resultado.
 ` : ''}- Usá registrar_lead cada vez que el cliente te dé datos útiles (nombre, interés, presupuesto, usado, financiación).
@@ -612,12 +612,13 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
       const r = await credito.calificar(s, { documento: input.documento, sexo: input.sexo, nombre: input.nombre || ctx.nombreWa, telefono: ctx.telefono, auto: input.auto });
       if (!r.ok) return r;
       const a = credito.paraAra(r.raw);
+      const ai = credito.interno(r.raw);
       if (!simulate) {
         q.upsertLead.run({ session_id: sid, jid, nombre: null, interes: 'financiacion', vehiculo_interes: input.auto || null, presupuesto: null, usado_entrega: null, financiacion: null, notas: null, updated_at: now() });
         credito.creditos.add.run({
           session_id: sid, jid, documento: r.documento, cuil: r.cuil, nombre: input.nombre || ctx.nombreWa || null, rol: input.rol === 'segundo' ? 'segundo' : 'titular',
           solicitud_id: r.raw.solicitud_id != null ? String(r.raw.solicitud_id) : null, estado: a.respuesta_final ? 'final' : 'pendiente',
-          resultado: a.tiene_credito ? 'califica' : a.califica === false ? 'no_califica' : null, bancos: JSON.stringify(a.bancos_aprobados),
+          resultado: a.tiene_credito ? 'califica' : a.califica === false ? 'no_califica' : null, bancos: JSON.stringify(ai.bancos_aprobados),
           avisado: a.respuesta_final ? 1 : 0, created_at: now(), updated_at: now(),
         });
         credito.creditos.leadCredito.run(credito.textoLead(r.raw) + (input.rol === 'segundo' ? ' (2do DNI)' : ''), sid, jid);
@@ -626,7 +627,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
       }
       let instruccion;
       if (!a.respuesta_final) instruccion = 'Los bancos todavía están respondiendo. Decile que lo estás consultando y que le escribís en unos minutos con el resultado.';
-      else if (a.tiene_credito) instruccion = 'Tiene crédito disponible. Decíselo con alegría (sin montos) y proponé una cita para armar la propuesta con un asesor.';
+      else if (a.tiene_credito) instruccion = `Tiene crédito aprobado. Decile "¡Felicitaciones, ${input.nombre || 'nombre del cliente'}! Tenés crédito aprobado" (sin montos ni bancos) y tratá de agendar la cita ya, ofreciendo dos opciones de día y horario.`;
       else if (a.califica === false) instruccion = input.rol === 'segundo'
         ? 'Este segundo DNI tampoco califica. Decíselo con tacto y ofrecé otras opciones (contado, permuta) y una cita con un asesor.'
         : 'No califica con este DNI. Decíselo con tacto y pedile el DNI de otra persona de su entorno (pareja, familiar) que pueda ser titular o garante.';
@@ -800,7 +801,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
       for (const c of credito.creditos.pendientes.all(now() - 20 * 60)) {
         try {
           const r = await credito.consultarSolicitud(s, c.solicitud_id);
-          const a = credito.paraAra(r);
+          const a = credito.interno(r);
           const vencido = c.created_at < now() - 12 * 60;
           if (!a.respuesta_final && !vencido) continue;
           const resultado = a.tiene_credito ? 'califica' : a.califica === false ? 'no_califica' : null;
@@ -808,7 +809,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
           credito.creditos.leadCredito.run(credito.textoLead(r) + (c.rol === 'segundo' ? ' (2do DNI)' : ''), c.session_id, c.jid);
           this.emit('credito', { session_id: c.session_id, jid: c.jid, nombre: c.nombre, resultado: credito.textoLead(r) });
           this.emit('lead', { session_id: c.session_id, jid: c.jid });
-          const resumen = resultado === 'califica' ? `TIENE crédito disponible${a.bancos_aprobados.length ? ' (bancos: ' + a.bancos_aprobados.join(', ') + ')' : ''}`
+          const resumen = resultado === 'califica' ? 'TIENE crédito aprobado (decile "¡Felicitaciones, [nombre]! Tenés crédito aprobado", sin montos ni bancos, y tratá de agendar la cita ya)'
             : resultado === 'no_califica' ? `NO califica${c.rol === 'segundo' ? ' (era el segundo DNI)' : ''}`
             : 'quedó para que la termine de revisar un asesor';
           const k = c.session_id + '|' + c.jid;

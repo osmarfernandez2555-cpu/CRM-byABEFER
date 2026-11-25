@@ -77,15 +77,24 @@ export async function probarRuthina(settings) {
   throw new Error(`Ruthina respondió ${r.status}: ${r.d?.error || 'error'}`);
 }
 
-// Resumen para ARA: sin montos ni detalle por banco (eso es interno)
-export function paraAra(r) {
+// Datos internos (panel y ficha del cliente): incluye bancos, nunca montos
+export function interno(r) {
   return {
-    estado: r.estado,                                  // pendiente | parcial | resuelto | descartado
     respuesta_final: !!r.respuesta_final,
-    califica: r.califica,                              // true | false | null
+    califica: r.califica,
     tiene_credito: r.califica === true || (r.bancos_aprobados || []).length > 0,
     bancos_aprobados: r.bancos_aprobados || [],
-    mensaje_sugerido: r.mensaje_cliente || '',
+  };
+}
+
+// Lo que ve ARA: solo si tiene crédito o no. Sin montos y sin nombres de bancos.
+export function paraAra(r) {
+  const i = interno(r);
+  return {
+    estado: r.estado,                                  // pendiente | parcial | resuelto | descartado
+    respuesta_final: i.respuesta_final,
+    califica: i.califica,                              // true | false | null
+    tiene_credito: i.tiene_credito,
   };
 }
 
@@ -122,7 +131,7 @@ export async function consultarSolicitud(settings, id) {
 }
 
 export function textoLead(r) {
-  const a = paraAra(r);
+  const a = interno(r);
   if (a.califica === true || a.tiene_credito) return `Califica${a.bancos_aprobados.length ? ' (' + a.bancos_aprobados.join(', ') + ')' : ''}`;
   if (a.califica === false) return 'No califica';
   return a.estado === 'pendiente' ? 'Consultando…' : 'A revisar por un asesor';
