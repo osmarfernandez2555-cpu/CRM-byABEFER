@@ -98,7 +98,7 @@ export function paraAra(r) {
   };
 }
 
-export async function calificar(settings, { documento, sexo, nombre, telefono, auto, esperar = 25 }) {
+export async function calificar(settings, { documento, sexo, nombre, telefono, auto, rol, esperar = 25 }) {
   const cfg = ruthinaConfig(settings);
   if (!cfg.listo) throw new Error('La consulta de crédito con Ruthina no está configurada');
   let doc = soloDigitos(documento);
@@ -114,7 +114,7 @@ export async function calificar(settings, { documento, sexo, nombre, telefono, a
   if (!cuilValido(cuil)) return { ok: false, error: 'Ese CUIL no es válido. Pedile al cliente que lo revise.' };
   const r = await llamar(cfg, '/api/bot/calificar', {
     method: 'POST',
-    body: JSON.stringify({ cuil, nombre, telefono, auto, esperar_segundos: Math.min(55, esperar), origen: 'ara' }),
+    body: JSON.stringify({ cuil, nombre, telefono, auto, esperar_segundos: Math.min(55, esperar), origen: 'ara', ...(rol === 'segundo' ? { rol: 'garante' } : {}) }),
     timeout: (Math.min(55, esperar) + 20) * 1000,
   });
   if (r.status === 400) return { ok: false, error: r.d?.mensaje_cliente || r.d?.error || 'Dato inválido' };

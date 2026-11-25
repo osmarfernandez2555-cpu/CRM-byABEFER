@@ -609,7 +609,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
       return { ok: true, cita_id: cita.id, mensaje: 'Cita registrada' };
     }
     if (name === 'calificar_credito') {
-      const r = await credito.calificar(s, { documento: input.documento, sexo: input.sexo, nombre: input.nombre || ctx.nombreWa, telefono: ctx.telefono, auto: input.auto });
+      const r = await credito.calificar(s, { documento: input.documento, sexo: input.sexo, nombre: input.nombre || ctx.nombreWa, telefono: ctx.telefono, auto: input.auto, rol: input.rol });
       if (!r.ok) return r;
       const a = credito.paraAra(r.raw);
       const ai = credito.interno(r.raw);
