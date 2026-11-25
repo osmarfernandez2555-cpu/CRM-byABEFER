@@ -117,8 +117,13 @@ export async function calificar(settings, { documento, sexo, nombre, telefono, a
     body: JSON.stringify({ cuil, nombre, telefono, auto, esperar_segundos: Math.min(55, esperar), origen: 'ara', ...(rol === 'segundo' ? { rol: 'garante' } : {}) }),
     timeout: (Math.min(55, esperar) + 20) * 1000,
   });
-  if (r.status === 400) return { ok: false, error: r.d?.mensaje_cliente || r.d?.error || 'Dato inválido' };
-  if (!r.ok) throw new Error(`Ruthina (${r.status}): ${r.d?.error || 'error'}`);
+  const fin = `CUIL ${cuil.slice(0, 2)}-…${cuil.slice(-4)}${rol === 'segundo' ? ' (garante)' : ''}`;
+  if (r.status === 400) { console.warn(`💳 Ruthina rechazó la consulta (${fin}): ${r.d?.error || 'dato inválido'}`); return { ok: false, error: r.d?.mensaje_cliente || r.d?.error || 'Dato inválido' }; }
+  if (!r.ok) { console.warn(`💳 Ruthina error ${r.status} (${fin}): ${r.d?.error || ''}`); throw new Error(`Ruthina (${r.status}): ${r.d?.error || 'error'}`); }
+  const d = r.d || {};
+  console.log(`💳 Consulta a Ruthina ${fin} → pedido #${d.solicitud_id ?? '?'} · ${d.estado || '?'}`
+    + (d.desde_cache ? ' · RESULTADO GUARDADO (ese CUIL ya se consultó en las últimas 24 h: no aparece como pedido nuevo en Pedidos Bancos)' : '')
+    + (d.reutilizado ? ' · ya había un pedido abierto con ese CUIL (se reutilizó)' : ''));
   return { ok: true, cuil, documento: doc, raw: r.d };
 }
 
