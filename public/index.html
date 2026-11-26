@@ -382,6 +382,11 @@ select.inp{padding:8px 10px}
       </div>
       <label class="field"><span>Ubicación en Google Maps (ARA la manda al confirmar la cita o si preguntan cómo llegar)</span>
         <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp" id="mapsUrl" placeholder="https://maps.app.goo.gl/..." style="flex:1;min-width:260px"><a class="btn ghost" id="mapsOpen" target="_blank" rel="noopener">Ver en el mapa</a></div></label>
+      <div class="field"><span>Recordatorio de citas</span>
+        <label class="checks"><label><input type="checkbox" id="remOn"> Mandar un recordatorio por WhatsApp antes de cada cita</label></label>
+        <div class="grid2"><label class="field"><span>Cuántas horas antes</span><input class="inp" type="number" min="0.5" max="48" step="0.5" id="remHours"></label></div>
+        <label class="field"><span>Mensaje (podés usar {nombre}, {cuando} = hoy/mañana, {hora}, {dia}, {mapa}, {motivo}, {vehiculo})</span><textarea class="inp" id="remText" rows="4"></textarea></label>
+      </div>
       <div class="field"><span>Horario de atención para citas (vacío = cerrado)</span><div class="grid2" id="araHorarios"></div></div>
     </div>
 
@@ -548,6 +553,7 @@ function connectSocket() {
     if (araTab === 'citas') loadCitas();
   });
   socket.on('citas', () => { if (araTab === 'citas') loadCitas(); });
+  socket.on('recordatorio', (c) => toast(`🔔 Recordatorio enviado a ${c.nombre || c.telefono} (cita ${c.hora})`));
   socket.on('credito', (c) => toast(`💳 Crédito de ${c.nombre || 'un cliente'}: ${c.resultado}`));
   socket.on('lead', () => { if (araTab === 'leads') loadLeads(); });
   socket.on('araerror', (e) => toast('⚠️ ARA no pudo responder: ' + e.error));
@@ -1048,6 +1054,7 @@ async function openAra(tab = 'general') {
   const VOCES = [['Kore', 'Kore — mujer, firme y clara'], ['Aoede', 'Aoede — mujer, liviana'], ['Leda', 'Leda — mujer, juvenil'], ['Zephyr', 'Zephyr — mujer, luminosa'], ['Callirrhoe', 'Callirrhoe — mujer, relajada'], ['Autonoe', 'Autonoe — mujer, brillante'], ['Despina', 'Despina — mujer, suave'], ['Erinome', 'Erinome — mujer, clara'], ['Laomedeia', 'Laomedeia — mujer, animada'], ['Achernar', 'Achernar — mujer, suave'], ['Gacrux', 'Gacrux — mujer, madura'], ['Pulcherrima', 'Pulcherrima — mujer, decidida'], ['Vindemiatrix', 'Vindemiatrix — mujer, amable'], ['Sulafat', 'Sulafat — mujer, cálida'], ['Puck', 'Puck — hombre, alegre'], ['Charon', 'Charon — hombre, informativo'], ['Fenrir', 'Fenrir — hombre, enérgico'], ['Orus', 'Orus — hombre, firme']];
   $('#voiceName').innerHTML = VOCES.map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
   if (!VOCES.some(([v]) => v === a.voiceName)) $('#voiceName').insertAdjacentHTML('beforeend', `<option value="${esc(a.voiceName)}">${esc(a.voiceName)}</option>`);
+  $('#remOn').checked = !!a.reminderEnabled; $('#remHours').value = a.reminderHours; $('#remText').value = a.reminderText || '';
   $('#mapsUrl').value = a.mapsUrl || ''; $('#mapsOpen').href = a.mapsUrl || '#';
   $('#credOn').checked = !!a.creditEnabled; $('#ruthinaUrl').value = a.ruthinaUrl || '';
   $('#credStatus').innerHTML = a.status.ruthinaKey ? '<span class="ok">✓ Clave RUTHINA_BOT_KEY cargada</span> · ARA nunca le dice montos ni bancos: solo \"¡Felicitaciones! Tenés crédito aprobado\" y agenda la cita; si no califica, le pide otro DNI.' : '<span class="bad">✗ Falta la variable RUTHINA_BOT_KEY en Railway (copiá la misma que tiene Ruthina)</span>';
@@ -1116,6 +1123,7 @@ function araForm() {
     horarios, instructions: $('#araInstr').value, knowledge: $('#araKnow').value,
     skills: S.ara.skills,
     mapsUrl: $('#mapsUrl').value.trim(),
+    reminderEnabled: $('#remOn').checked, reminderHours: +$('#remHours').value || 2, reminderText: $('#remText').value,
     creditEnabled: $('#credOn').checked, ruthinaUrl: $('#ruthinaUrl').value.trim(),
     voiceReplies: $('#voiceOn').checked, voiceName: $('#voiceName').value, voiceStyle: $('#voiceStyle').value.trim(),
     stockEnabled: $('#stockEnabled').checked, stockUrl: $('#stockUrl').value.trim() || 'https://tutuautomotores.com',
@@ -1274,6 +1282,7 @@ async function loadCitas() {
         <select class="inp" style="width:auto" data-cita="${c.id}">
           ${[['pendiente', 'Pendiente'], ['confirmada', 'Confirmada'], ['asistio', 'Asistió ✓'], ['no_vino', 'No vino'], ['cancelada', 'Cancelada']].map(([v, l]) => `<option value="${v}" ${c.estado === v ? 'selected' : ''}>${l}</option>`).join('')}
         </select></div>
+      ${c.recordatorio === 1 ? '<div class="kv">🔔 Recordatorio enviado</div>' : ''}
       <div class="kv"><b>${esc(MOTIVOS[c.motivo] || c.motivo)}</b>${c.vehiculo ? ' · ' + esc(c.vehiculo) : ''} · ${esc(c.telefono || '')} · vía ${esc(c.session_name || '')}</div>
       ${c.notas ? `<div class="kv">${esc(c.notas)}</div>` : ''}
       <div><button class="btn sm ghost" data-open="${c.session_id}|${esc(c.jid)}">Abrir chat</button></div>

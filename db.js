@@ -84,6 +84,7 @@ CREATE INDEX IF NOT EXISTS idx_chat_ts ON chats(session_id, last_ts);
 
 // Migraciones simples para bases creadas con la versión anterior
 try { db.exec('ALTER TABLE messages ADD COLUMN by_bot INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE citas ADD COLUMN recordatorio INTEGER DEFAULT 0'); } catch {} // 0 pendiente, 1 enviado, -1 no corresponde
 
 export const q = {
   listSessions: db.prepare('SELECT * FROM sessions ORDER BY created_at'),
@@ -143,6 +144,8 @@ export const q = {
   citasDeChat: db.prepare(`SELECT * FROM citas WHERE session_id = ? AND jid = ? AND estado IN ('pendiente','confirmada') ORDER BY fecha, hora`),
   citasDelSlot: db.prepare(`SELECT COUNT(*) AS n FROM citas WHERE fecha = ? AND hora = ? AND estado IN ('pendiente','confirmada')`),
   setCitaEstado: db.prepare('UPDATE citas SET estado = ? WHERE id = ?'),
+  citasParaRecordar: db.prepare(`SELECT * FROM citas WHERE estado IN ('pendiente','confirmada') AND COALESCE(recordatorio,0) = 0 AND fecha BETWEEN ? AND ?`),
+  setRecordatorio: db.prepare('UPDATE citas SET recordatorio = ? WHERE id = ?'),
   cancelCitasChat: db.prepare(`UPDATE citas SET estado = 'cancelada' WHERE session_id = ? AND jid = ? AND estado IN ('pendiente','confirmada')`),
 
   getLead: db.prepare('SELECT * FROM leads WHERE session_id = ? AND jid = ?'),

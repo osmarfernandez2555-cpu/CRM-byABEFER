@@ -165,7 +165,7 @@ io.use((socket, next) => {
 for (const ev of ['session', 'message', 'media', 'status', 'refresh', 'removed', 'msgupdate']) {
   wa.on(ev, (data) => io.emit(ev, data));
 }
-for (const ev of ['bot', 'cita', 'citas', 'lead', 'actions', 'araerror', 'credito']) {
+for (const ev of ['bot', 'cita', 'citas', 'lead', 'actions', 'araerror', 'credito', 'recordatorio']) {
   ara.on(ev, (data) => io.emit(ev, data));
 }
 wa.on('message', (data) => { try { ara.onMessage(data); } catch (e) { console.error('ARA onMessage', e); } });
@@ -182,5 +182,6 @@ server.listen(PORT, () => {
   wa.startAll();
   startStockSync();
   ara.startCreditPoller();
+  ara.startReminders();
   { const c = credito.ruthinaConfig(getSettings()); console.log(c.listo ? `💳 Crédito: ARA califica clientes con Ruthina (${c.url})` : `💳 Crédito: ${c.key ? 'apagado en el panel' : 'falta RUTHINA_BOT_KEY'} — ARA no califica`); }
 });

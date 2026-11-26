@@ -86,6 +86,9 @@ const DEFAULTS = {
   sendPhotos: true,        // ARA puede mandar fotos de los autos
   maxPhotos: 3,
   mapsUrl: 'https://maps.app.goo.gl/bruaSebsVVckhGna8',   // ubicación del Polo 52 en Google Maps
+  reminderEnabled: true,   // recordatorio por WhatsApp antes de cada cita
+  reminderHours: 2,
+  reminderText: '¡Hola {nombre}! 👋 Te recuerdo que {cuando} a las {hora} te esperamos en el Polo 52, Autopista Córdoba–Rosario.\n\n📍 Cómo llegar: {mapa}\n\nSi te surge algo y no podés venir, avisame por acá y lo reprogramamos 😊',
   creditEnabled: true,     // calificar clientes con Ruthina
   ruthinaUrl: 'https://compara-conejo-production.up.railway.app',
   voiceReplies: true,      // si el cliente manda audio, ARA responde con audio
@@ -102,7 +105,8 @@ export function getSettings() {
   try { saved = JSON.parse(q.getSetting.get('ara')?.value || '{}'); } catch {}
   const def = JSON.parse(JSON.stringify(DEFAULTS)); // copia: nunca modificar los valores por defecto
   if (String(process.env.GEMINI_API_KEY || '').trim()) def.model = 'gemini-auto'; // con clave de Gemini, responde Gemini por defecto
-  if (saved.stockMinutes === 30) saved.stockMinutes = 720; // el valor viejo por defecto pasa a 12 horas
+  if (saved.stockMinutes === 30) saved.stockMinutes = 720;
+  if (typeof saved.reminderText === 'string') saved.reminderText = saved.reminderText.replace('Te recuerdo que hoy a las {hora}', 'Te recuerdo que {cuando} a las {hora}'); // el valor viejo por defecto pasa a 12 horas
   const st = { ...def, ...saved, horarios: { ...def.horarios, ...(saved.horarios || {}) } };
   if (Array.isArray(saved.skills)) {
     // habilidades nuevas que vengan en futuras versiones se agregan solas
@@ -139,6 +143,7 @@ export function saveSettings(patch) {
   cur.pauseHours = Math.max(0, +cur.pauseHours || 0);
   cur.delaySec = Math.min(60, Math.max(2, +cur.delaySec || 8));
   cur.maxPerSlot = Math.max(1, +cur.maxPerSlot || 3);
+  cur.reminderHours = Math.min(48, Math.max(0.5, +cur.reminderHours || 2));
   cur.mapsUrl = String(cur.mapsUrl || '').trim().replace(/[?&]g_st=[^&]*/, '');
   cur.stockMinutes = Math.min(10080, Math.max(30, +cur.stockMinutes || 720));
   cur.maxPhotos = Math.min(6, Math.max(1, +cur.maxPhotos || 3));
@@ -793,6 +798,46 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
       this.running.delete(k);
       if (this.pending.delete(k)) this.respond(sid, jid);
     }
+  }
+
+  // Recordatorio por WhatsApp X horas antes de cada cita
+  startReminders() {
+    const tick = async () => {
+      const s = getSettings();
+      if (!s.reminderEnabled) return;
+      const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
+      const manana = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(Date.now() + 48 * 3600 * 1000));
+      for (const c of q.citasParaRecordar.all(hoy, manana)) {
+        const cuando = Date.parse(`${c.fecha}T${String(c.hora).padStart(5, '0')}:00-03:00`);
+        if (isNaN(cuando)) continue;
+        const faltan = cuando - Date.now();
+        const ventana = s.reminderHours * 3600 * 1000;
+        if (faltan > ventana) continue;                       // todavía no
+        if (faltan <= 0) { q.setRecordatorio.run(-1, c.id); continue; }       // ya pasó
+        if (c.created_at * 1000 > cuando - ventana) { q.setRecordatorio.run(-1, c.id); continue; } // se agendó hace un rato: no hace falta
+        const sess = wa.sessions.get(c.session_id);
+        if (sess?.status !== 'open') continue;                // se reintenta cuando vuelva a conectarse
+        const nombre = (c.nombre || q.getChat.get(c.session_id, c.jid)?.name || '').split(' ')[0];
+        const texto = String(s.reminderText || DEFAULTS.reminderText)
+          .replace(/\{nombre\}/g, nombre).replace(/\{hora\}/g, c.hora).replace(/\{mapa\}/g, s.mapsUrl || '')
+          .replace(/\{dia\}/g, new Date(`${c.fecha}T12:00:00-03:00`).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: TZ }))
+          .replace(/\{cuando\}/g, (() => { const hoyD = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date()); const man = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(Date.now() + 86400000)); return c.fecha === hoyD ? 'hoy' : c.fecha === man ? 'mañana' : 'el ' + new Date(`${c.fecha}T12:00:00-03:00`).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', timeZone: TZ }); })())
+          .replace(/\{motivo\}/g, c.motivo || '').replace(/\{vehiculo\}/g, c.vehiculo || '')
+          .replace(/¡Hola !/g, '¡Hola!').replace(/\n*📍 Cómo llegar: *\n/g, '\n').trim();
+        try {
+          q.setRecordatorio.run(1, c.id);
+          await wa.sendText(c.session_id, c.jid, texto, { byBot: true });
+          console.log(`🔔 Recordatorio enviado: cita #${c.id} (${c.nombre || c.telefono}) ${c.fecha} ${c.hora}`);
+          this.emit('recordatorio', { ...c, session_name: q.getSession.get(c.session_id)?.name });
+          this.emit('citas', {});
+        } catch (e) {
+          q.setRecordatorio.run(0, c.id);
+          console.warn('🔔 No se pudo mandar el recordatorio:', e.message);
+        }
+      }
+    };
+    setTimeout(() => tick().catch(() => {}), 5000);
+    setInterval(() => tick().catch(() => {}), 60 * 1000);
   }
 
   // Revisa las consultas de crédito que quedaron pendientes y avisa al cliente cuando llega el resultado
