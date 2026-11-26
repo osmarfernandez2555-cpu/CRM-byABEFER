@@ -85,6 +85,7 @@ const DEFAULTS = {
   stockMinutes: 720,       // 12 horas
   sendPhotos: true,        // ARA puede mandar fotos de los autos
   maxPhotos: 3,
+  mapsUrl: 'https://maps.app.goo.gl/bruaSebsVVckhGna8',   // ubicación del Polo 52 en Google Maps
   creditEnabled: true,     // calificar clientes con Ruthina
   ruthinaUrl: 'https://compara-conejo-production.up.railway.app',
   voiceReplies: true,      // si el cliente manda audio, ARA responde con audio
@@ -138,6 +139,7 @@ export function saveSettings(patch) {
   cur.pauseHours = Math.max(0, +cur.pauseHours || 0);
   cur.delaySec = Math.min(60, Math.max(2, +cur.delaySec || 8));
   cur.maxPerSlot = Math.max(1, +cur.maxPerSlot || 3);
+  cur.mapsUrl = String(cur.mapsUrl || '').trim().replace(/[?&]g_st=[^&]*/, '');
   cur.stockMinutes = Math.min(10080, Math.max(30, +cur.stockMinutes || 720));
   cur.maxPhotos = Math.min(6, Math.max(1, +cur.maxPhotos || 3));
   q.setSetting.run('ara', JSON.stringify(cur));
@@ -295,6 +297,7 @@ ${s.sendPhotos ? '- Si el cliente pide fotos o se interesa por una unidad concre
 - Si la consulta queda pendiente, decile que lo estás consultando con los bancos y que le escribís en unos minutos. El sistema te avisa cuando llega el resultado. Nunca inventes un resultado.
 ` : ''}- Usá registrar_lead cada vez que el cliente te dé datos útiles (nombre, interés, presupuesto, usado, financiación).
 - Para agendar usá agendar_cita solo después de que el cliente confirme día y hora. Después de registrarla, confirmale día, hora y la dirección.
+${s.mapsUrl ? `- UBICACIÓN: cuando confirmes una cita o el cliente pregunte dónde están o cómo llegar, mandale el link de Google Maps: ${s.mapsUrl}` : ''}
 - NUNCA le pidas al cliente que traiga algo a la cita (título, cédula, 08, VTV, informe de dominio, DNI, recibos, llaves, ni ningún papel) ni que mande fotos o documentos antes. Solo tiene que venir. Si viene al caso, podés contarle la documentación como parte del proceso ("la transferencia y los papeles los vemos nosotros en la agencia"), pero sin pedirle nada.
 - Si te preguntan si sos un bot, una IA o una persona, respondé con la verdad: sos ARA, la asistente virtual de Tutu Automotores, y podés pasarlo con un asesor cuando quiera.
 - Formato WhatsApp: texto plano, sin markdown (nada de **, #, ni tablas). Máximo 3 mensajes cortos, separados por una línea en blanco. Emojis con moderación.
@@ -598,7 +601,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
       const hora = String(input.hora || '').padStart(5, '0');
       const err = validarCita(input.fecha, hora, s);
       if (err) return { ok: false, error: err };
-      if (simulate) return { ok: true, simulado: true, mensaje: 'Cita registrada (simulación, no se guardó)' };
+      if (simulate) return { ok: true, simulado: true, mensaje: 'Cita registrada (simulación, no se guardó)', ubicacion_google_maps: s.mapsUrl || undefined };
       const r = q.addCita.run({
         session_id: sid, jid, nombre: input.nombre || null, telefono: ctx.telefono || null, fecha: input.fecha, hora,
         motivo: input.motivo || 'otro', vehiculo: input.vehiculo || null, notas: input.notas || null, created_at: now(),
@@ -606,7 +609,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
       q.upsertLead.run({ session_id: sid, jid, nombre: input.nombre || null, interes: null, vehiculo_interes: null, presupuesto: null, usado_entrega: null, financiacion: null, notas: null, updated_at: now() });
       const cita = q.getCita.get(r.lastInsertRowid);
       this.emit('cita', { ...cita, session_name: q.getSession.get(sid)?.name });
-      return { ok: true, cita_id: cita.id, mensaje: 'Cita registrada' };
+      return { ok: true, cita_id: cita.id, mensaje: 'Cita registrada', ubicacion_google_maps: s.mapsUrl || undefined };
     }
     if (name === 'calificar_credito') {
       const r = await credito.calificar(s, { documento: input.documento, sexo: input.sexo, nombre: input.nombre || ctx.nombreWa, telefono: ctx.telefono, auto: input.auto, rol: input.rol });

@@ -380,6 +380,8 @@ select.inp{padding:8px 10px}
         </div>
         <div class="small">Usa la voz de Gemini (GEMINI_API_KEY). Los links se mandan escritos después del audio. Probala en "Probar a ARA" marcando "El cliente manda audios".</div>
       </div>
+      <label class="field"><span>Ubicación en Google Maps (ARA la manda al confirmar la cita o si preguntan cómo llegar)</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp" id="mapsUrl" placeholder="https://maps.app.goo.gl/..." style="flex:1;min-width:260px"><a class="btn ghost" id="mapsOpen" target="_blank" rel="noopener">Ver en el mapa</a></div></label>
       <div class="field"><span>Horario de atención para citas (vacío = cerrado)</span><div class="grid2" id="araHorarios"></div></div>
     </div>
 
@@ -1046,6 +1048,7 @@ async function openAra(tab = 'general') {
   const VOCES = [['Kore', 'Kore — mujer, firme y clara'], ['Aoede', 'Aoede — mujer, liviana'], ['Leda', 'Leda — mujer, juvenil'], ['Zephyr', 'Zephyr — mujer, luminosa'], ['Callirrhoe', 'Callirrhoe — mujer, relajada'], ['Autonoe', 'Autonoe — mujer, brillante'], ['Despina', 'Despina — mujer, suave'], ['Erinome', 'Erinome — mujer, clara'], ['Laomedeia', 'Laomedeia — mujer, animada'], ['Achernar', 'Achernar — mujer, suave'], ['Gacrux', 'Gacrux — mujer, madura'], ['Pulcherrima', 'Pulcherrima — mujer, decidida'], ['Vindemiatrix', 'Vindemiatrix — mujer, amable'], ['Sulafat', 'Sulafat — mujer, cálida'], ['Puck', 'Puck — hombre, alegre'], ['Charon', 'Charon — hombre, informativo'], ['Fenrir', 'Fenrir — hombre, enérgico'], ['Orus', 'Orus — hombre, firme']];
   $('#voiceName').innerHTML = VOCES.map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
   if (!VOCES.some(([v]) => v === a.voiceName)) $('#voiceName').insertAdjacentHTML('beforeend', `<option value="${esc(a.voiceName)}">${esc(a.voiceName)}</option>`);
+  $('#mapsUrl').value = a.mapsUrl || ''; $('#mapsOpen').href = a.mapsUrl || '#';
   $('#credOn').checked = !!a.creditEnabled; $('#ruthinaUrl').value = a.ruthinaUrl || '';
   $('#credStatus').innerHTML = a.status.ruthinaKey ? '<span class="ok">✓ Clave RUTHINA_BOT_KEY cargada</span> · ARA nunca le dice montos ni bancos: solo \"¡Felicitaciones! Tenés crédito aprobado\" y agenda la cita; si no califica, le pide otro DNI.' : '<span class="bad">✗ Falta la variable RUTHINA_BOT_KEY en Railway (copiá la misma que tiene Ruthina)</span>';
   $('#voiceName').value = a.voiceName; $('#voiceOn').checked = !!a.voiceReplies; $('#voiceStyle').value = a.voiceStyle || '';
@@ -1112,6 +1115,7 @@ function araForm() {
     pauseHours: +$('#araPause').value, delaySec: +$('#araDelay').value, model: $('#araModel').value, maxPerSlot: +$('#araSlot').value,
     horarios, instructions: $('#araInstr').value, knowledge: $('#araKnow').value,
     skills: S.ara.skills,
+    mapsUrl: $('#mapsUrl').value.trim(),
     creditEnabled: $('#credOn').checked, ruthinaUrl: $('#ruthinaUrl').value.trim(),
     voiceReplies: $('#voiceOn').checked, voiceName: $('#voiceName').value, voiceStyle: $('#voiceStyle').value.trim(),
     stockEnabled: $('#stockEnabled').checked, stockUrl: $('#stockUrl').value.trim() || 'https://tutuautomotores.com',
