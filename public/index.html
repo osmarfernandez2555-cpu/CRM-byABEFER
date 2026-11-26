@@ -363,6 +363,7 @@ select.inp{padding:8px 10px}
       <div class="field"><span>Celulares donde trabaja ARA</span><div class="checks" id="araSessions"></div><div class="small">Si no marcás ninguno, trabaja en todos.</div></div>
       <div class="grid2">
         <label class="field"><span>Si responde una persona, ARA se calla (horas)</span><input class="inp" type="number" min="0" id="araPause"></label>
+        <label class="field"><span>Si ARA pasa a un asesor y nadie contesta, retoma a las (horas)</span><input class="inp" type="number" min="0.5" step="0.5" id="araHandoff"></label>
         <label class="field"><span>Espera antes de responder (segundos)</span><input class="inp" type="number" min="2" max="60" id="araDelay"></label>
         <label class="field"><span>IA que responde</span><select class="inp" id="araModel"></select><span class="small" id="araModelInfo"></span></label>
         <label class="field"><span>Máximo de citas en el mismo horario</span><input class="inp" type="number" min="1" id="araSlot"></label>
@@ -544,7 +545,7 @@ function connectSocket() {
   socket.on('bot', (b) => {
     for (const c of S.chats) if (c.session_id === b.session_id && c.jid === b.jid) Object.assign(c, { paused_until: b.paused_until, needs_human: b.needs_human });
     if (S.active && S.active.session_id === b.session_id && S.active.jid === b.jid) { Object.assign(S.active, { paused_until: b.paused_until, needs_human: b.needs_human }); renderPill(); }
-    if (b.alerta) { toast(`🙋 ${b.nombre || b.telefono} pidió hablar con un asesor`); try { if (Notification.permission === 'granted') new Notification('Cliente pide asesor', { body: (b.nombre || b.telefono) + ' — ' + (b.reason || '') }); } catch {} }
+    if (b.alerta) { toast(b.sigueEsperando ? `🙋 ${b.nombre || b.telefono} sigue esperando un asesor (nadie le respondió). ARA retomó la charla.` : `🙋 ${b.nombre || b.telefono} pidió hablar con un asesor`); try { if (Notification.permission === 'granted') new Notification('Cliente pide asesor', { body: (b.nombre || b.telefono) + ' — ' + (b.reason || '') }); } catch {} }
     renderChats();
   });
   socket.on('cita', (c) => {
@@ -1024,7 +1025,12 @@ function renderPill() {
   if (S.ara.sessions?.length && !S.ara.sessions.includes(c.session_id)) { pill.className = 'pill off'; pill.textContent = '🤖 ARA no trabaja en este celular'; pill.dataset.a = 'open'; return; }
   const tests = String(S.ara.testNumbers || '').split(/[\s,;]+/).map(x => x.replace(/\D/g, '')).filter(x => x.length >= 6);
   if (tests.length && !tests.some(n => numOf(c.jid).endsWith(n.slice(-8)))) { pill.className = 'pill off'; pill.textContent = '🧪 Modo prueba: ARA no responde acá'; pill.dataset.a = 'open'; return; }
-  if (c.needs_human) { pill.className = 'pill human'; pill.textContent = '🙋 Pidió asesor · Reactivar ARA'; pill.dataset.a = 'resume'; pill.title = c.reason || ''; return; }
+  if (c.needs_human) {
+    pill.className = 'pill human'; pill.title = c.reason || ''; pill.dataset.a = 'resume';
+    if (c.paused_until && c.paused_until > now) pill.textContent = '🙋 Pidió asesor · ARA vuelve ' + new Date(c.paused_until * 1000).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) + ' · Reactivar ya';
+    else pill.textContent = '🙋 Espera asesor · ARA lo atiende · Marcar resuelto';
+    return;
+  }
   if (c.paused_until && c.paused_until > now) {
     const hasta = c.paused_until >= FOREVER ? '' : ' hasta ' + new Date(c.paused_until * 1000).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
     pill.className = 'pill paused'; pill.textContent = '⏸ ARA pausada' + hasta + ' · Reactivar'; pill.dataset.a = 'resume'; pill.title = ''; return;
@@ -1049,7 +1055,7 @@ async function openAra(tab = 'general') {
   const ta = $('#testAudio');
   if (ta) ta.onclick = async (e) => { e.preventDefault(); ta.textContent = 'Probando…'; try { await api('/api/ara/test-audio', { method: 'POST' }); ta.textContent = '✓ La clave funciona'; } catch (err) { ta.textContent = 'Probar clave de audios'; toast('✗ ' + err.message); } };
   $('#araTest').value = a.testNumbers || '';
-  $('#araPause').value = a.pauseHours; $('#araDelay').value = a.delaySec; $('#araSlot').value = a.maxPerSlot;
+  $('#araPause').value = a.pauseHours; $('#araHandoff').value = a.handoffHours; $('#araDelay').value = a.delaySec; $('#araSlot').value = a.maxPerSlot;
   fillModels(a.model);
   const VOCES = [['Kore', 'Kore — mujer, firme y clara'], ['Aoede', 'Aoede — mujer, liviana'], ['Leda', 'Leda — mujer, juvenil'], ['Zephyr', 'Zephyr — mujer, luminosa'], ['Callirrhoe', 'Callirrhoe — mujer, relajada'], ['Autonoe', 'Autonoe — mujer, brillante'], ['Despina', 'Despina — mujer, suave'], ['Erinome', 'Erinome — mujer, clara'], ['Laomedeia', 'Laomedeia — mujer, animada'], ['Achernar', 'Achernar — mujer, suave'], ['Gacrux', 'Gacrux — mujer, madura'], ['Pulcherrima', 'Pulcherrima — mujer, decidida'], ['Vindemiatrix', 'Vindemiatrix — mujer, amable'], ['Sulafat', 'Sulafat — mujer, cálida'], ['Puck', 'Puck — hombre, alegre'], ['Charon', 'Charon — hombre, informativo'], ['Fenrir', 'Fenrir — hombre, enérgico'], ['Orus', 'Orus — hombre, firme']];
   $('#voiceName').innerHTML = VOCES.map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
@@ -1119,7 +1125,7 @@ function araForm() {
   return {
     enabled: $('#araEnabled').checked, testNumbers: $('#araTest').value.trim(),
     sessions: [...document.querySelectorAll('#araSessions input:checked')].map(i => i.value),
-    pauseHours: +$('#araPause').value, delaySec: +$('#araDelay').value, model: $('#araModel').value, maxPerSlot: +$('#araSlot').value,
+    pauseHours: +$('#araPause').value, handoffHours: +$('#araHandoff').value || 4, delaySec: +$('#araDelay').value, model: $('#araModel').value, maxPerSlot: +$('#araSlot').value,
     horarios, instructions: $('#araInstr').value, knowledge: $('#araKnow').value,
     skills: S.ara.skills,
     mapsUrl: $('#mapsUrl').value.trim(),

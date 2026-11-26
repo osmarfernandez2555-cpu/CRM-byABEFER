@@ -2,7 +2,7 @@
 import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
-import { q, DATA_DIR } from './db.js';
+import db, { q, DATA_DIR } from './db.js';
 import wa from './wa.js';
 import { DEFAULT_SKILLS, SKILL_TEXT_MAX, SKILL_FIXES } from './skills.js';
 import * as stock from './stock.js';
@@ -77,6 +77,7 @@ const DEFAULTS = {
   sessions: [],            // vacío = todos los celulares
   testNumbers: '',         // si tiene números, ARA solo responde a esos
   pauseHours: 12,          // si un humano escribe en el chat, ARA se calla estas horas
+  handoffHours: 4,         // si ARA deriva a un asesor y nadie contesta en estas horas, ARA retoma
   delaySec: 8,             // espera a que el cliente termine de escribir
   model: 'claude-sonnet-5-5',
   maxPerSlot: 3,
@@ -141,6 +142,7 @@ export function saveSettings(patch) {
   for (const k of allowed) if (patch[k] !== undefined) cur[k] = patch[k];
   if (patch.skills !== undefined) cur.skills = cleanSkills(patch.skills) || cur.skills;
   cur.pauseHours = Math.max(0, +cur.pauseHours || 0);
+  cur.handoffHours = Math.min(168, Math.max(0.5, +cur.handoffHours || 4));
   cur.delaySec = Math.min(60, Math.max(2, +cur.delaySec || 8));
   cur.maxPerSlot = Math.max(1, +cur.maxPerSlot || 3);
   cur.reminderHours = Math.min(48, Math.max(0.5, +cur.reminderHours || 2));
@@ -322,7 +324,7 @@ ${s.stockEnabled ? '=== STOCK EN LA WEB ===\n' + (stock.stockResumen() || 'El st
 Nombre en WhatsApp: ${ctx.nombreWa || 'desconocido'}
 Teléfono: ${ctx.telefono || 'desconocido'}
 ${lead ? 'Datos ya registrados: ' + JSON.stringify(Object.fromEntries(Object.entries(lead).filter(([k, v]) => v && !['session_id', 'jid', 'updated_at'].includes(k)))) : 'Sin datos registrados todavía.'}
-${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.motivo})`).join(', ') : 'Sin citas activas.'}`;
+${(() => { const b = ctx.sid !== 'sim' ? q.getBot.get(ctx.sid, ctx.jid) : null; return b?.needs_human ? `IMPORTANTE: antes le pasaste este cliente a un asesor (motivo: ${b.reason || 'sin detalle'}) y todavía nadie del equipo le respondió. Retomá la charla con amabilidad, pedile disculpas por la demora y ayudalo en todo lo que puedas; el equipo ya fue avisado de nuevo. No vuelvas a derivar por el mismo motivo salvo que el cliente insista en hablar con una persona.\n` : ''; })()}${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.motivo})`).join(', ') : 'Sin citas activas.'}`;
     return [
       { type: 'text', text: fijo, cache_control: { type: 'ephemeral' } },
       { type: 'text', text: dinamico },
@@ -686,7 +688,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
     }
     if (name === 'derivar_a_humano') {
       if (simulate) return { ok: true, simulado: true, instruccion: 'Avisale al cliente que un asesor le escribe a la brevedad.' };
-      q.setBot.run({ session_id: sid, jid, paused_until: FOREVER, needs_human: 1, reason: String(input.motivo || '').slice(0, 300) });
+      q.setBot.run({ session_id: sid, jid, paused_until: now() + Math.round(s.handoffHours * 3600), needs_human: 1, reason: String(input.motivo || '').slice(0, 300) });
       this.emit('bot', { session_id: sid, jid, ...q.getBot.get(sid, jid), alerta: true, telefono: ctx.telefono, nombre: ctx.nombreWa });
       return { ok: true, instruccion: 'Avisale al cliente que un asesor le escribe a la brevedad. Después de esto no sigas la conversación.' };
     }
@@ -722,7 +724,7 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
         if (s.pauseHours > 0 && /@(s\.whatsapp\.net|lid)$/.test(jid)) {
           const b = q.getBot.get(sid, jid);
           const until = now() + s.pauseHours * 3600;
-          if (!b || (b.paused_until < until && b.paused_until !== FOREVER)) {
+          if (!b || b.needs_human || (b.paused_until < until && b.paused_until !== FOREVER)) {
             q.setBot.run({ session_id: sid, jid, paused_until: until, needs_human: 0, reason: 'Respondió una persona' });
             this.emit('bot', { session_id: sid, jid, ...q.getBot.get(sid, jid) });
           }
@@ -736,6 +738,17 @@ ${citas.length ? 'Citas activas: ' + citas.map(c => `${c.fecha} ${c.hora} (${c.m
     if (m.type === 'audio' && !m.text && this.openaiKey()) this.transcribe(sid, m);
     if (m.ts < now() - 600) return;          // mensajes viejos que llegan al reconectar
     if (!this.canReply(sid, jid)) return;
+    const bh = q.getBot.get(sid, jid);
+    if (bh?.needs_human) {
+      const key = sid + '|' + jid + '|' + bh.paused_until;
+      this._avisados = this._avisados || new Set();
+      if (!this._avisados.has(key)) {
+        this._avisados.add(key);
+        const chat = q.getChat.get(sid, jid);
+        this.emit('bot', { session_id: sid, jid, ...bh, alerta: true, sigueEsperando: true, telefono: '+' + jid.split('@')[0], nombre: chat?.name });
+        console.log(`🙋 ${chat?.name || jid.split('@')[0]} sigue esperando un asesor: nadie respondió en ${getSettings().handoffHours} h, ARA retoma la charla`);
+      }
+    }
     const k = sid + '|' + jid;
     clearTimeout(this.timers.get(k));
     this.timers.set(k, setTimeout(() => { this.timers.delete(k); this.respond(sid, jid); }, getSettings().delaySec * 1000));
@@ -929,6 +942,9 @@ function splitMessages(text) {
   if (parts.length > 3) parts = [parts[0], parts[1], parts.slice(2).join('\n\n')];
   return parts;
 }
+
+// Derivaciones anteriores a este cambio quedaban pausadas para siempre: ahora vencen (ARA retoma si el cliente escribe)
+try { db.prepare(`UPDATE chat_bot SET paused_until = ? WHERE needs_human = 1 AND paused_until >= ?`).run(Math.floor(Date.now() / 1000), FOREVER); } catch {}
 
 // Sincroniza el stock de la web cada X minutos
 export function startStockSync() {
