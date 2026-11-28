@@ -16,6 +16,7 @@ Panel web para ver y responder los WhatsApp de varios celulares desde un solo lu
 - `db.js`: base de datos SQLite
 - `media.js`: conversión de audio con ffmpeg (incluido, no hay que instalar nada)
 - `credito.js`: calificación crediticia vía Ruthina (`/api/bot/calificar`)
+- `market.js`: búsqueda en Tutu Market (red Tutu Match) para ofrecer más opciones después de las de la web
 - `stock.js`: lectura y búsqueda del stock de la web
 - `skills.js`: habilidades de venta que vienen de fábrica
 - `ara.js`: ARA (IA con Claude, herramientas para agendar citas, guardar clientes y pasar a un asesor)

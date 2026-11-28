@@ -58,7 +58,7 @@ export async function subirFotoMarket(sid, jid, buf, mime) {
 }
 
 // 2) Auto que el cliente quiere vender o dejar en consignación -> stock de Ruthina
-export async function cargarAutoAStock({ tel, nombre, marca, modelo, version, anio, km, precio, estadoGeneral }) {
+export async function cargarAutoAStock({ tel, nombre, marca, modelo, version, anio, km, precio, estadoGeneral, color, moneda, detalles, consignacion }) {
   if (!activo()) return { ok: false, error: 'sincronización apagada' };
   tel = telDe(tel);
   const mod = limpio(modelo);
@@ -66,8 +66,11 @@ export async function cargarAutoAStock({ tel, nombre, marca, modelo, version, an
   if (!telValido(tel)) return { ok: false, error: 'No tengo el teléfono del cliente' };
   const body = {
     marca: limpio(marca) || 'Sin especificar', modelo: mod, version: limpio(version), anio: limpio(anio),
-    km: soloNum(km) || 0, precio: soloNum(precio) || '', moneda: 'ARS', estado: 'A revisar',
-    notas: `Cargado automático por ARA (WhatsApp). Precio pedido por el vendedor (${limpio(nombre) || 'sin nombre'}), sujeto a tasación e inspección de Tutu.` + (limpio(estadoGeneral) ? ' Estado que cuenta el cliente: ' + limpio(estadoGeneral) : ''),
+    km: soloNum(km) || 0, color: limpio(color), precio: soloNum(precio) || '', moneda: moneda === 'USD' ? 'USD' : 'ARS', estado: 'A revisar',
+    notas: `Cargado automático por ARA (WhatsApp). Precio pedido por el vendedor (${limpio(nombre) || 'sin nombre'}), sujeto a tasación e inspección de Tutu.`
+      + (limpio(consignacion) ? ' Consignación: ' + limpio(consignacion) + '.' : '')
+      + (limpio(estadoGeneral) ? ' Estado que cuenta el cliente: ' + limpio(estadoGeneral) + '.' : '')
+      + (limpio(detalles) ? ' Detalles: ' + limpio(detalles) : ''),
     ubicacion: `${limpio(nombre) || 'Sin nombre'} - ${tel}`, telefono: tel,
   };
   try {

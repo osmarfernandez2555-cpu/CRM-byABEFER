@@ -8,6 +8,7 @@ import { DEFAULT_SKILLS, SKILL_TEXT_MAX, SKILL_FIXES } from './skills.js';
 import * as stock from './stock.js';
 import { pcmToWav, toMp3 } from './media.js';
 import * as credito from './credito.js';
+import * as market from './market.js';
 import * as ruthina from './ruthina-sync.js';
 export { DEFAULT_SKILLS };
 
@@ -36,10 +37,11 @@ VENTAS
 3. Recomendá opciones del stock que figura en "Conocimiento". Si no hay algo que encaje, decilo y proponé alternativas o que un asesor le busque opciones.
 4. Cerrá proponiendo una visita: "¿Te queda bien venir el jueves a la tarde así lo ves y lo manejás?".
 
-CONSIGNACIÓN (el cliente quiere que vendamos su auto)
-1. Explicá brevemente cómo funciona según "Conocimiento".
-2. Pedí: marca, modelo, versión, año, kilómetros, estado general, precio que pretende y fotos.
-3. Proponé una cita para tasarlo en el Polo 52.
+VENTA DEL AUTO DEL CLIENTE (consignación + Tutu Match)
+1. Si quiere vender, explicale nuestro sistema de consignación según "Conocimiento". La prioridad es que lo deje en consignación con nosotros.
+2. Contale también Tutu Match: cargamos su auto en nuestra base, del otro lado hay gente buscando autos, y si hay match nos comunicamos con él y con el comprador.
+3. Pedí toda la info posible: marca, modelo, versión, año, kilómetros, color, monto pretendido, estado general, si es único dueño, service, detalles y fotos.
+4. Proponé una cita para peritarlo en el Polo 52.
 
 USADOS / TASACIÓN
 - Nunca des un precio de tasación por WhatsApp: la tasación se hace viendo el auto. Pedí los datos y citá al cliente.
@@ -87,7 +89,9 @@ const DEFAULTS = {
   stockMinutes: 720,       // 12 horas
   sendPhotos: true,        // ARA puede mandar fotos de los autos
   maxPhotos: 3,
-  mapsUrl: 'https://maps.app.goo.gl/bruaSebsVVckhGna8',   // ubicación del Polo 52 en Google Maps
+  mapsUrl: 'https://maps.app.goo.gl/bruaSebsVVckhGna8',
+  marketEnabled: true,     // buscar también en Tutu Market (red Tutu Match) y cargar autos de clientes
+  marketUrl: 'https://tutu-market-bytutumatch.up.railway.app',   // ubicación del Polo 52 en Google Maps
   reminderEnabled: true,   // recordatorio por WhatsApp antes de cada cita
   reminderHours: 2,
   reminderText: '¡Hola {nombre}! 👋 Te recuerdo que {cuando} a las {hora} te esperamos en el Polo 52, Autopista Córdoba–Rosario.\n\n📍 Cómo llegar: {mapa}\n\nSi te surge algo y no podés venir, avisame por acá y lo reprogramamos 😊',
@@ -229,15 +233,19 @@ const TOOLS = [
   },
   {
     name: 'cargar_consignacion',
-    description: 'Carga en el sistema el auto que el cliente quiere vender o dejar en consignación, para que un asesor lo evalúe y se publique en Tutu Market. Usala apenas tengas al menos modelo, año y kilómetros (marca y versión si las sabés). Podés volver a usarla si el cliente corrige un dato.',
+    description: 'Carga en la base de Ruthina / Tutu Match el auto que el cliente quiere vender (o dejar en consignación), para que un asesor lo evalúe, se publique en Tutu Market y se cruce con compradores. Usala apenas tengas al menos modelo, año y kilómetros, y volvé a usarla cada vez que sume datos (monto, estado, detalles) o cambie de idea sobre la consignación.',
     input_schema: {
       type: 'object',
       properties: {
         nombre: { type: 'string', description: 'Nombre del cliente' },
         marca: { type: 'string' }, modelo: { type: 'string' }, version: { type: 'string' },
         anio: { type: 'string' }, km: { type: 'string', description: 'Kilómetros' },
-        precio_pedido: { type: 'string', description: 'Precio que pretende el cliente, si lo dijo' },
-        estado_general: { type: 'string', description: 'Estado que cuenta el cliente (service, detalles, un solo dueño, etc.)' },
+        color: { type: 'string' },
+        precio_pedido: { type: 'string', description: 'Monto que pretende el cliente, si lo dijo' },
+        moneda: { type: 'string', enum: ['ARS', 'USD'], description: 'Moneda del monto pretendido' },
+        estado_general: { type: 'string', description: 'Estado que cuenta el cliente (chapa, pintura, mecánica, cubiertas, service, detalles)' },
+        detalles: { type: 'string', description: 'Todo lo demás útil: único dueño, papeles al día, GNC, acepta permuta, ciudad, etc.' },
+        consignacion: { type: 'string', enum: ['acepta', 'lo piensa', 'no quiere'], description: 'Qué dijo sobre dejarlo en consignación con Tutu' },
       },
       required: ['modelo'],
     },
@@ -252,7 +260,7 @@ const TOOLS = [
 const STOCK_TOOLS = [
   {
     name: 'buscar_stock',
-    description: 'Busca autos disponibles en el stock publicado en la web de Tutu. Usala SIEMPRE antes de recomendar un auto o dar un precio. Podés combinar filtros. Si no hay resultados, probá con filtros más amplios.',
+    description: 'Busca autos disponibles: primero en la web de Tutu (con precio y link) y después en la red Tutu Match / Tutu Market (sin precio). Usala SIEMPRE antes de recomendar un auto o dar un precio. Podés combinar filtros. Si no hay resultados, probá con filtros más amplios.',
     input_schema: {
       type: 'object',
       properties: {
@@ -288,7 +296,7 @@ const CREDIT_TOOL = {
 const PHOTO_TOOL = {
   name: 'enviar_fotos_auto',
   description: 'Manda al cliente por WhatsApp las fotos de un auto del stock (con nombre, precio y link). Usala cuando el cliente pide fotos o muestra interés concreto en una unidad. Usá el id que devuelve buscar_stock.',
-  input_schema: { type: 'object', properties: { id: { type: 'number', description: 'id del auto (de buscar_stock)' } }, required: ['id'] },
+  input_schema: { type: 'object', properties: { id: { type: 'string', description: 'id del auto tal cual lo devuelve buscar_stock (los de Tutu Market empiezan con M)' } }, required: ['id'] },
 };
 
 class Ara extends EventEmitter {
@@ -313,7 +321,10 @@ ${s.knowledge}
 
 ${habilidadesTexto(s.skills)}=== REGLAS FIJAS (tienen prioridad sobre todo lo anterior) ===
 - No inventes precios, stock, tasas, cuotas ni condiciones. Si algo no está en CONOCIMIENTO, decí que lo confirmás con un asesor y ofrecé una cita o usá derivar_a_humano.
-${s.stockEnabled ? `- STOCK: antes de recomendar un auto o dar un precio, usá buscar_stock. Lo que devuelve es el stock real y actualizado de la web, y manda sobre cualquier stock escrito en CONOCIMIENTO. Nunca ofrezcas un auto que no aparezca ahí. Cuando recomiendes una unidad, pasá el link de la publicación. Mostrá como mucho 3 opciones por mensaje.
+- Si no sabés qué quiere el cliente, preguntá simple: "¿Estás buscando comprar un auto o querés vender el tuyo?". Nunca ofrezcas "vender" y "dejar en consignación" como opciones separadas.
+${s.marketEnabled ? `- VENTA DEL AUTO DEL CLIENTE: si quiere vender, explicale nuestro sistema de consignación (según CONOCIMIENTO): la prioridad es convencerlo de dejarlo en consignación con nosotros, mostrando los beneficios. Además contale Tutu Match: cargamos su auto en nuestra base, del otro lado tenemos gente buscando autos, y si hay match (alguien busca un auto como el suyo) nos comunicamos con él y con el comprador. El precio no se publica.
+- Pedile toda la información posible, de a poco (dos o tres datos por mensaje): marca, modelo, versión, año, kilómetros, color, monto pretendido, estado general, si es único dueño, service, detalles y fotos del auto (frente, atrás, costados, interior y tablero). Con eso lo cargás con cargar_consignacion. Después proponé la cita para peritarlo en el Polo 52.
+` : ''}${s.stockEnabled || s.marketEnabled ? `- STOCK: antes de recomendar un auto o dar un precio, usá buscar_stock. Devuelve dos listas: "web" (autos de Tutu publicados en la web, con precio y link) y "red_tutu_match" (autos de la red Tutu Match / Tutu Market, sin precio). Mostrá SIEMPRE primero las opciones de la web; después ofrecé las de la red Tutu Match con su link, aclarando que el precio te lo confirma un asesor. Cuando pidan un modelo, mandá todas las opciones que haya (si son muchas, las de la web y las mejores de la red). Nunca ofrezcas un auto que no aparezca en esas listas.
 ${s.sendPhotos ? '- Si el cliente pide fotos o se interesa por una unidad concreta, usá enviar_fotos_auto (las fotos se mandan solas; después no repitas el link).\n' : ''}` : ''}${credito.ruthinaConfig(s).listo ? `- CRÉDITO: si el cliente quiere financiar o pregunta si le dan crédito, ofrecé consultarlo en el momento, sin compromiso: pedile el DNI del titular y consultalo con calificar_credito. El sexo del titular deducilo del nombre; si no te das cuenta, preguntalo con naturalidad.
 - Nunca digas montos, cuotas, tasas ni nombres de bancos (ni los que aprobaron ni los que rechazaron). Si tiene crédito, decile: "¡Felicitaciones, [nombre]! Tenés crédito aprobado" y enseguida tratá de agendar la cita en el Polo 52, ofreciendo dos opciones concretas de día y horario.
 - Si NO califica: decíselo con tacto, sin culpas, y pedile el DNI de otra persona de su entorno (pareja, familiar) que pueda ser titular o garante; consultalo con calificar_credito con rol "segundo". Si ese tampoco califica, ofrecé otras opciones (contado, permuta) y una cita con un asesor.
@@ -322,7 +333,7 @@ ${s.sendPhotos ? '- Si el cliente pide fotos o se interesa por una unidad concre
 - Para agendar usá agendar_cita solo después de que el cliente confirme día y hora. Después de registrarla, confirmale día, hora y la dirección.
 ${s.mapsUrl ? `- UBICACIÓN: cuando confirmes una cita o el cliente pregunte dónde están o cómo llegar, mandale el link de Google Maps: ${s.mapsUrl}` : ''}
 - NUNCA le pidas al cliente que traiga algo a la cita (título, cédula, 08, VTV, informe de dominio, DNI, recibos, llaves, ni ningún papel) ni que mande documentos. Solo tiene que venir. La ÚNICA excepción: si quiere vender o consignar su auto, sí podés pedirle fotos del VEHÍCULO (frente, costados, atrás, interior, tablero), nunca fotos de documentos ni de personas.
-- CONSIGNACIÓN / VENTA DE SU AUTO: apenas tengas modelo, año y kilómetros usá cargar_consignacion (no esperes a tener todo). Las fotos del auto que mande se publican solas en Tutu Market: no le prometas publicación, precio ni plazos; decile que un asesor lo evalúa y lo contacta. Si manda una foto que no es de un auto, no la comentes como si lo fuera. Si viene al caso, podés contarle la documentación como parte del proceso ("la transferencia y los papeles los vemos nosotros en la agencia"), pero sin pedirle nada.
+- CARGA DEL AUTO: apenas tengas modelo, año y kilómetros usá cargar_consignacion (no esperes a tener todo) y volvé a usarla cuando sume datos. Las fotos del auto que mande se suben solas a Tutu Market: no le prometas precio de venta ni plazos; un asesor lo evalúa y lo contacta. Si manda una foto que no es de un auto, no la comentes como si lo fuera. Si viene al caso, podés contarle la documentación como parte del proceso ("la transferencia y los papeles los vemos nosotros en la agencia"), pero sin pedirle nada.
 - Si te preguntan si sos un bot, una IA o una persona, respondé con la verdad: sos ARA, la asistente virtual de Tutu Automotores, y podés pasarlo con un asesor cuando quiera.
 - Formato WhatsApp: texto plano, sin markdown (nada de **, #, ni tablas). Máximo 3 mensajes cortos, separados por una línea en blanco. Emojis con moderación.
 - Si el último mensaje del cliente no necesita respuesta (por ejemplo un "ok" o un "gracias" después de despedirse), respondé exactamente: [SILENCIO]
@@ -596,7 +607,8 @@ ${(() => { const b = ctx.sid !== 'sim' ? q.getBot.get(ctx.sid, ctx.jid) : null; 
     const actions = [];
     const gemini = /^gemini/.test(s.model);
     for (let i = 0; i < 5; i++) {
-      const tools = [...TOOLS, ...(s.stockEnabled ? STOCK_TOOLS : []), ...(s.stockEnabled && s.sendPhotos ? [PHOTO_TOOL] : []), ...(credito.ruthinaConfig(s).listo ? [CREDIT_TOOL] : [])];
+      const busca = s.stockEnabled || s.marketEnabled;
+      const tools = [...TOOLS, ...(busca ? STOCK_TOOLS : []), ...(busca && s.sendPhotos ? [PHOTO_TOOL] : []), ...(credito.ruthinaConfig(s).listo ? [CREDIT_TOOL] : [])];
       const res = gemini
         ? await this.callGemini(s.model, system, messages, tools)
         : await this.callClaude({ model: s.model, max_tokens: 1024, system, messages, tools });
@@ -662,9 +674,41 @@ ${(() => { const b = ctx.sid !== 'sim' ? q.getBot.get(ctx.sid, ctx.jid) : null; 
       return { ok: true, ...a, instruccion, simulacion: simulate ? 'Consulta real hecha desde el simulador (no se avisa por WhatsApp)' : undefined };
     }
     if (name === 'buscar_stock') {
-      const r = stock.buscar(input);
-      if (!stock.getStock().autos.length) return { ok: false, error: 'El stock no está disponible ahora. Ofrecé que un asesor le pase opciones.' };
-      return { ok: true, ...r, nota: r.total > r.autos.length ? `Hay ${r.total} resultados, se muestran ${r.autos.length}. Afiná la búsqueda si hace falta.` : undefined };
+      const web = s.stockEnabled && stock.getStock().autos.length ? stock.buscar(input) : { total: 0, autos: [] };
+      let red = { total: 0, autos: [] }, redError;
+      if (s.marketEnabled) {
+        try { red = await market.buscarMarket(s, input, s.stockEnabled ? stock.getStock().autos : []); }
+        catch (e) { redError = e.message; }
+      }
+      if (!web.total && !red.total && redError && !stock.getStock().autos.length) return { ok: false, error: 'El stock no está disponible ahora. Ofrecé que un asesor le pase opciones.' };
+      return {
+        ok: true,
+        web: { total: web.total, autos: web.autos },
+        red_tutu_match: { total: red.total, autos: red.autos },
+        orden: 'Mostrá primero los de "web" y después los de "red_tutu_match".',
+        nota: (web.total > web.autos.length || red.total > red.autos.length) ? 'Hay más resultados de los que se muestran. Afiná la búsqueda si hace falta.' : undefined,
+      };
+    }
+    if (name === 'enviar_fotos_auto' && /^m/i.test(String(input.id))) {
+      const a = await market.autoMarketPorId(s, input.id);
+      if (!a) return { ok: false, error: 'No encontré ese auto en Tutu Market. Volvé a buscarlo con buscar_stock.' };
+      const fotos = a.fotosReales.slice(0, s.maxPhotos);
+      if (!fotos.length) return { ok: false, error: 'Ese auto de la red no tiene fotos reales todavía. Pasale el link.', link: a.link };
+      const caption = `${a.nombre} ${a.anio}${a.km ? ' · ' + Number(a.km).toLocaleString('es-AR') + ' km' : ''}\n${a.link}`;
+      if (simulate) return { ok: true, simulado: true, enviadas: fotos.length, fotos, caption };
+      let enviadas = 0;
+      for (let i = 0; i < fotos.length; i++) {
+        try {
+          const r = await fetch(fotos[i], { signal: AbortSignal.timeout(20000) });
+          if (!r.ok) continue;
+          const buf = Buffer.from(await r.arrayBuffer());
+          let mime = (r.headers.get('content-type') || 'image/jpeg').split(';')[0];
+          if (!/^image\/(jpeg|png|webp)$/.test(mime)) mime = 'image/jpeg';
+          await wa.sendFile(sid, jid, buf, mime, 'foto.jpg', i === 0 ? caption : undefined, { byBot: true });
+          enviadas++;
+        } catch (e) { console.warn('Foto market no enviada:', e.message); }
+      }
+      return enviadas ? { ok: true, enviadas } : { ok: false, error: 'No se pudieron descargar las fotos. Pasale el link.', link: a.link };
     }
     if (name === 'enviar_fotos_auto') {
       const a = stock.porId(input.id);
@@ -695,9 +739,10 @@ ${(() => { const b = ctx.sid !== 'sim' ? q.getBot.get(ctx.sid, ctx.jid) : null; 
     }
     if (name === 'cargar_consignacion') {
       if (simulate) return { ok: true, simulado: true, mensaje: 'Auto cargado (simulación, no se guardó)' };
-      const r = await ruthina.cargarAutoAStock({ tel: ctx.telefono, nombre: input.nombre || ctx.nombreWa, marca: input.marca, modelo: input.modelo, version: input.version, anio: input.anio, km: input.km, precio: input.precio_pedido, estadoGeneral: input.estado_general });
+      const r = await ruthina.cargarAutoAStock({ tel: ctx.telefono, nombre: input.nombre || ctx.nombreWa, marca: input.marca, modelo: input.modelo, version: input.version, anio: input.anio, km: input.km, precio: input.precio_pedido, estadoGeneral: input.estado_general, color: input.color, moneda: input.moneda, detalles: input.detalles, consignacion: input.consignacion });
+      if (r.ok) this.emit('tutumatch', { session_id: sid, jid, nombre: input.nombre || ctx.nombreWa, auto: [input.marca, input.modelo, input.anio].filter(Boolean).join(' '), accion: r.accion });
       if (!r.ok) return { ok: false, error: r.error, instruccion: 'No le avises nada al cliente de este error; seguí la charla y, si hace falta, derivá a un asesor para que cargue el auto.' };
-      q.upsertLead.run({ session_id: sid, jid, nombre: input.nombre || null, interes: 'consignacion', vehiculo_interes: null, presupuesto: null, usado_entrega: [input.marca, input.modelo, input.version, input.anio, input.km && input.km + ' km'].filter(Boolean).join(' '), financiacion: null, notas: null, updated_at: now() });
+      q.upsertLead.run({ session_id: sid, jid, nombre: input.nombre || null, interes: 'consignacion', vehiculo_interes: null, presupuesto: null, usado_entrega: [input.marca, input.modelo, input.version, input.anio, input.km && input.km + ' km', input.precio_pedido && 'pretende ' + input.precio_pedido + (input.moneda === 'USD' ? ' USD' : '')].filter(Boolean).join(' '), financiacion: null, notas: input.consignacion ? 'Consignación: ' + input.consignacion : null, updated_at: now() });
       this.emit('lead', { session_id: sid, jid });
       return { ok: true, mensaje: 'Auto cargado para evaluación', instruccion: 'Si todavía no mandó fotos, pedile fotos del auto (frente, costados, atrás, interior y tablero). Solo fotos del vehículo.' };
     }

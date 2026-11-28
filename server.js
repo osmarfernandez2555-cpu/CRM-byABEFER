@@ -12,6 +12,7 @@ import wa from './wa.js';
 import ara, { getSettings, saveSettings, DEFAULT_INSTRUCTIONS, DEFAULT_KNOWLEDGE, DEFAULT_SKILLS, startStockSync } from './ara.js';
 import * as stock from './stock.js';
 import * as credito from './credito.js';
+import * as market from './market.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -109,7 +110,7 @@ app.get('/media/:sid/:id', guard, wrap(async (req, res) => {
 // ---------- ARA (bot de IA) ----------
 app.get('/api/ara/settings', guard, (req, res) => res.json({
   ...getSettings(),
-  status: { ruthinaKey: !!credito.ruthinaConfig(getSettings()).key, anthropic: !!process.env.ANTHROPIC_API_KEY, gemini: !!ara.geminiKey(), audio: ara.audioProvider()?.name || null, openai: !!ara.audioProvider(), audioError: ara.lastAudioError || null },
+  status: { marketKey: !!String(process.env.MARKET_KEY || '').trim(), ruthinaKey: !!credito.ruthinaConfig(getSettings()).key, anthropic: !!process.env.ANTHROPIC_API_KEY, gemini: !!ara.geminiKey(), audio: ara.audioProvider()?.name || null, openai: !!ara.audioProvider(), audioError: ara.lastAudioError || null },
   defaults: { instructions: DEFAULT_INSTRUCTIONS, knowledge: DEFAULT_KNOWLEDGE, skills: DEFAULT_SKILLS },
 }));
 app.put('/api/ara/settings', guard, wrap(async (req, res) => {
@@ -151,6 +152,10 @@ app.post('/api/ara/transcribe', guard, wrap(async (req, res) => {
   res.json({ text: await ara.transcribe(req.body.session, row, { strict: true }) });
 }));
 app.post('/api/ara/test-ruthina', guard, wrap(async (req, res) => res.json(await credito.probarRuthina(getSettings()))));
+app.post('/api/ara/test-market', guard, wrap(async (req, res) => {
+  const autos = await market.autosMarket(getSettings(), { force: true });
+  res.json({ ok: true, total: autos.length });
+}));
 app.get('/api/ara/creditos', guard, (req, res) => res.json(credito.creditos.todos.all()));
 app.get('/api/ara/leads', guard, (req, res) => res.json(q.listLeads.all()));
 
@@ -165,7 +170,7 @@ io.use((socket, next) => {
 for (const ev of ['session', 'message', 'media', 'status', 'refresh', 'removed', 'msgupdate']) {
   wa.on(ev, (data) => io.emit(ev, data));
 }
-for (const ev of ['bot', 'cita', 'citas', 'lead', 'actions', 'araerror', 'credito', 'recordatorio']) {
+for (const ev of ['bot', 'cita', 'citas', 'lead', 'actions', 'araerror', 'credito', 'recordatorio', 'tutumatch']) {
   ara.on(ev, (data) => io.emit(ev, data));
 }
 wa.on('message', (data) => { try { ara.onMessage(data); } catch (e) { console.error('ARA onMessage', e); } });

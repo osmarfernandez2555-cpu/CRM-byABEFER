@@ -405,6 +405,8 @@ select.inp{padding:8px 10px}
         <label class="field"><span>Fotos por auto que manda ARA</span><input class="inp" type="number" min="1" max="6" id="stockPhotos"></label>
         <label class="field"><span>&nbsp;</span><label class="checks"><label><input type="checkbox" id="stockSend"> ARA puede mandar fotos</label></label></label>
       </div>
+      <label class="switch"><input type="checkbox" id="mkOn"><div><b>Buscar también en Tutu Market (red Tutu Match) y cargar ahí los autos de los clientes que quieren vender</b><div class="small" id="mkStatus">ARA muestra primero los autos de la web de Tutu y después los de Tutu Market (sin precio, con su link).</div></div></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp" id="mkUrl" placeholder="https://tutu-market-bytutumatch.up.railway.app" style="flex:1;min-width:260px"><button class="btn ghost" id="mkTest">Probar Tutu Market</button></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp" id="stockSearch" placeholder="Buscar en el stock (ej: hilux, suv, 0km)" style="flex:1;min-width:200px"><button class="btn ghost" id="stockRefresh">↻ Actualizar ahora</button></div>
       <div id="stockList" style="display:grid;gap:8px"></div>
     </div>
@@ -555,6 +557,7 @@ function connectSocket() {
   });
   socket.on('citas', () => { if (araTab === 'citas') loadCitas(); });
   socket.on('recordatorio', (c) => toast(`🔔 Recordatorio enviado a ${c.nombre || c.telefono} (cita ${c.hora})`));
+  socket.on('tutumatch', (t) => toast(`🚗 ${t.nombre || 'Un cliente'}: ${t.auto} ${t.accion === 'actualizado' ? 'actualizado' : 'cargado'} en Tutu Match`));
   socket.on('credito', (c) => toast(`💳 Crédito de ${c.nombre || 'un cliente'}: ${c.resultado}`));
   socket.on('lead', () => { if (araTab === 'leads') loadLeads(); });
   socket.on('araerror', (e) => toast('⚠️ ARA no pudo responder: ' + e.error));
@@ -1071,6 +1074,10 @@ async function openAra(tab = 'general') {
   $('#araInstr').value = a.instructions; $('#araKnow').value = a.knowledge;
   $('#stockEnabled').checked = !!a.stockEnabled; $('#stockUrl').value = a.stockUrl || ''; $('#stockMin').value = a.stockMinutes / 60;
   $('#stockPhotos').value = a.maxPhotos; $('#stockSend').checked = !!a.sendPhotos;
+  $('#mkOn').checked = !!a.marketEnabled; $('#mkUrl').value = a.marketUrl || '';
+  $('#mkStatus').innerHTML = 'ARA muestra primero los autos de la web de Tutu y después los de Tutu Market (sin precio, con su link). '
+    + (a.status.marketKey ? '<span class="ok">✓ Puede subir las fotos de los clientes</span>' : '<span class="bad">Para subir las fotos que mandan los clientes: agregá MARKET_KEY en Railway (la misma de compara-conejo)</span>')
+;
   $('#araSaved').textContent = '';
   $('#araModal').classList.remove('hidden');
   showAraTab(tab);
@@ -1132,6 +1139,7 @@ function araForm() {
     reminderEnabled: $('#remOn').checked, reminderHours: +$('#remHours').value || 2, reminderText: $('#remText').value,
     creditEnabled: $('#credOn').checked, ruthinaUrl: $('#ruthinaUrl').value.trim(),
     voiceReplies: $('#voiceOn').checked, voiceName: $('#voiceName').value, voiceStyle: $('#voiceStyle').value.trim(),
+    marketEnabled: $('#mkOn').checked, marketUrl: $('#mkUrl').value.trim() || 'https://tutu-market-bytutumatch.up.railway.app',
     stockEnabled: $('#stockEnabled').checked, stockUrl: $('#stockUrl').value.trim() || 'https://tutuautomotores.com',
     stockMinutes: Math.round((+$('#stockMin').value || 12) * 60), maxPhotos: +$('#stockPhotos').value, sendPhotos: $('#stockSend').checked,
   };
@@ -1172,6 +1180,11 @@ function renderStock() {
     </a>`).join('') : `<div class="empty">${d.total ? 'Nada coincide con la búsqueda.' : 'Tocá "Actualizar ahora" para traer el stock de la web.'}</div>`;
 }
 $('#stockSearch').oninput = renderStock;
+$('#mkTest').onclick = async (e) => {
+  e.preventDefault(); const b = $('#mkTest'); b.textContent = 'Probando…';
+  try { await saveAra(true); const r = await api('/api/ara/test-market', { method: 'POST' }); b.textContent = `✓ ${r.total} autos en Tutu Market`; }
+  catch (err) { b.textContent = 'Probar Tutu Market'; toast('✗ ' + err.message); }
+};
 $('#stockRefresh').onclick = async () => {
   const b = $('#stockRefresh'); b.disabled = true; b.textContent = 'Actualizando…';
   try { await saveAra(true); const r = await api('/api/ara/stock/refresh', { method: 'POST' }); toast(`✓ ${r.total} autos cargados de la web`); }
@@ -1246,7 +1259,7 @@ function renderSim(extra = '') {
   $('#simMsgs').querySelectorAll('.player').forEach(bindPlayer);
   $('#simMsgs').scrollTop = $('#simMsgs').scrollHeight;
 }
-const NOMBRE_TOOL = { calificar_credito: '💳 Consultar crédito en Ruthina', buscar_stock: '🔎 Buscar en el stock', enviar_fotos_auto: '📷 Enviar fotos del auto', agendar_cita: '📅 Agendar cita', cancelar_cita: '🗑 Cancelar cita', registrar_lead: '📝 Guardar datos del cliente', derivar_a_humano: '🙋 Pasar a un asesor' };
+const NOMBRE_TOOL = { cargar_consignacion: '🚗 Cargar auto en Ruthina / Tutu Match', calificar_credito: '💳 Consultar crédito en Ruthina', buscar_stock: '🔎 Buscar en el stock', enviar_fotos_auto: '📷 Enviar fotos del auto', agendar_cita: '📅 Agendar cita', cancelar_cita: '🗑 Cancelar cita', registrar_lead: '📝 Guardar datos del cliente', derivar_a_humano: '🙋 Pasar a un asesor' };
 $('#simForm').onsubmit = async (e) => {
   e.preventDefault();
   const t = $('#simText').value.trim(); if (!t) return;
@@ -1260,7 +1273,8 @@ $('#simForm').onsubmit = async (e) => {
     for (const a of r.actions) {
       const det = Object.entries(a.input || {}).map(([k, v]) => `${k}: ${v}`).join(' · ');
       const extra = a.tool === 'calificar_credito' && a.result?.ok ? `\n→ ${a.result.respuesta_final ? (a.result.tiene_credito ? '✓ Tiene crédito aprobado' : a.result.califica === false ? '✗ No califica' : 'A revisar por un asesor') : '⏳ Pendiente (los bancos siguen respondiendo)'}`
-        : a.tool === 'buscar_stock' && a.result?.ok ? `\n→ ${a.result.total} resultado(s)` + (a.result.autos || []).slice(0, 4).map(x => `\n  • ${x.nombre} — ${x.precio}`).join('') : '';
+        : a.tool === 'buscar_stock' && a.result?.ok ? `\n→ Web Tutu: ${a.result.web?.total || 0}` + (a.result.web?.autos || []).slice(0, 4).map(x => `\n  • ${x.nombre} — ${x.precio}`).join('')
+          + `\n→ Tutu Market: ${a.result.red_tutu_match?.total || 0}` + (a.result.red_tutu_match?.autos || []).slice(0, 4).map(x => `\n  • ${x.nombre} ${x.anio}`).join('') : '';
       simConv.push({ act: `${NOMBRE_TOOL[a.tool] || a.tool}${det ? '\n' + det : ''}${extra}${a.result?.ok === false ? '\n✗ ' + a.result.error : ''}`, err: a.result?.ok === false });
       if (a.tool === 'enviar_fotos_auto' && a.result?.fotos) simConv.push({ role: 'assistant', text: a.result.caption, fotos: a.result.fotos });
     }
