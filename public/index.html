@@ -394,6 +394,16 @@ select.inp{padding:8px 10px}
     <div class="pane hidden" data-pane="train">
       <div class="small">Así "entrenás" a ARA: todo lo que escribas acá es lo que sabe y cómo se comporta. Completá los <b>[COMPLETAR]</b> con datos reales; ARA nunca inventa precios ni stock que no estén en Conocimiento.</div>
       <div class="field"><span>Personalidad e instrucciones de venta <button class="btn sm ghost" data-reset="instructions">Restaurar ejemplo</button></span><textarea class="inp big" id="araInstr"></textarea></div>
+      <div class="field"><span>Contrato de consignación — PRIVADO: ARA lo usa para responder dudas y objeciones, nunca lo muestra ni lo manda</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="file" id="ctFile" accept=".pdf,.txt" class="hidden">
+          <button class="btn sm" id="ctUp" style="background:#5b3fd6">📄 Subir contrato (PDF)</button>
+          <button class="btn sm ghost" id="ctView">Ver / editar texto</button>
+          <button class="btn sm danger" id="ctDel">Quitar</button>
+          <span class="small" id="ctInfo"></span>
+        </div>
+        <textarea class="inp big hidden" id="ctText" placeholder="Texto del contrato"></textarea>
+      </div>
       <div class="field"><span>Conocimiento: empresa, stock, financiación, consignación, promos <button class="btn sm ghost" data-reset="knowledge">Restaurar ejemplo</button></span><textarea class="inp big" id="araKnow"></textarea></div>
     </div>
 
@@ -1072,6 +1082,7 @@ async function openAra(tab = 'general') {
   const dias = [[1, 'Lunes'], [2, 'Martes'], [3, 'Miércoles'], [4, 'Jueves'], [5, 'Viernes'], [6, 'Sábado'], [0, 'Domingo']];
   $('#araHorarios').innerHTML = dias.map(([i, n]) => `<label class="hrow"><span>${n}</span><input class="inp" data-dia="${i}" value="${esc(a.horarios[i] || '')}" placeholder="cerrado (ej: 09:00-18:00)"></label>`).join('');
   $('#araInstr').value = a.instructions; $('#araKnow').value = a.knowledge;
+  $('#ctText').value = a.contract || ''; ctInfo();
   $('#stockEnabled').checked = !!a.stockEnabled; $('#stockUrl').value = a.stockUrl || ''; $('#stockMin').value = a.stockMinutes / 60;
   $('#stockPhotos').value = a.maxPhotos; $('#stockSend').checked = !!a.sendPhotos;
   $('#mkOn').checked = !!a.marketEnabled; $('#mkUrl').value = a.marketUrl || '';
@@ -1133,7 +1144,7 @@ function araForm() {
     enabled: $('#araEnabled').checked, testNumbers: $('#araTest').value.trim(),
     sessions: [...document.querySelectorAll('#araSessions input:checked')].map(i => i.value),
     pauseHours: +$('#araPause').value, handoffHours: +$('#araHandoff').value || 4, delaySec: +$('#araDelay').value, model: $('#araModel').value, maxPerSlot: +$('#araSlot').value,
-    horarios, instructions: $('#araInstr').value, knowledge: $('#araKnow').value,
+    horarios, instructions: $('#araInstr').value, knowledge: $('#araKnow').value, contract: $('#ctText').value.trim(),
     skills: S.ara.skills,
     mapsUrl: $('#mapsUrl').value.trim(),
     reminderEnabled: $('#remOn').checked, reminderHours: +$('#remHours').value || 2, reminderText: $('#remText').value,
@@ -1157,6 +1168,32 @@ $('#testRuthina').onclick = async (e) => {
   e.preventDefault(); const b = $('#testRuthina'); b.textContent = 'Probando…';
   try { await saveAra(true); await api('/api/ara/test-ruthina', { method: 'POST' }); b.textContent = '✓ Conectado con Ruthina'; }
   catch (err) { b.textContent = 'Probar conexión'; toast('✗ ' + err.message); }
+};
+
+// ---- Contrato privado ----
+function ctInfo() {
+  const n = $('#ctText').value.trim().length;
+  $('#ctInfo').innerHTML = n ? `<span class="ok">✓ Contrato cargado${S.ara.contractName ? ' (' + esc(S.ara.contractName) + ')' : ''} · ${n.toLocaleString('es-AR')} caracteres</span>` : '<span class="small">Sin contrato cargado</span>';
+  $('#ctDel').classList.toggle('hidden', !n);
+}
+$('#ctUp').onclick = (e) => { e.preventDefault(); $('#ctFile').click(); };
+$('#ctFile').onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  const fd = new FormData(); fd.append('file', f);
+  $('#ctInfo').textContent = 'Leyendo el contrato…';
+  try {
+    await saveAra(true);
+    const r = await api('/api/ara/contract', { method: 'POST', body: fd });
+    S.ara = await api('/api/ara/settings'); $('#ctText').value = S.ara.contract || ''; ctInfo();
+    toast(`✓ Contrato cargado (${r.chars.toLocaleString('es-AR')} caracteres). ARA ya lo usa para responder dudas.`);
+  } catch (err) { ctInfo(); toast('✗ ' + err.message); }
+};
+$('#ctView').onclick = (e) => { e.preventDefault(); $('#ctText').classList.toggle('hidden'); };
+$('#ctText').oninput = ctInfo;
+$('#ctDel').onclick = async (e) => {
+  e.preventDefault();
+  if (!confirm('¿Quitar el contrato? ARA ya no lo va a usar para responder.')) return;
+  $('#ctText').value = ''; ctInfo(); await saveAra(true); toast('Contrato quitado');
 };
 
 // ---- Stock ----

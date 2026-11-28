@@ -15,7 +15,8 @@
     "multer": "^2.5.0",
     "pino": "^10.4.0",
     "qrcode": "^1.5.4",
-    "socket.io": "^4.8.4"
+    "socket.io": "^4.8.4",
+    "unpdf": "^2.2.3"
   },
   "type": "module",
   "engines": {

@@ -151,6 +151,19 @@ app.post('/api/ara/transcribe', guard, wrap(async (req, res) => {
   if (!row || row.type !== 'audio') throw new Error('Audio no encontrado');
   res.json({ text: await ara.transcribe(req.body.session, row, { strict: true }) });
 }));
+app.post('/api/ara/contract', guard, upload.single('file'), wrap(async (req, res) => {
+  if (!req.file) throw new Error('Falta el archivo');
+  let text = '';
+  if (/pdf$/i.test(req.file.mimetype) || /\.pdf$/i.test(req.file.originalname)) {
+    const { extractText, getDocumentProxy } = await import('unpdf');
+    const pdf = await getDocumentProxy(new Uint8Array(req.file.buffer));
+    text = (await extractText(pdf, { mergePages: true })).text;
+  } else text = req.file.buffer.toString('utf8');
+  text = text.replace(/[ \t]+/g, ' ').replace(/_{3,}/g, '____').replace(/\n\s*\n+/g, '\n').replace(/CONTRATO DE CONSIGNACIÓN N°\s*\n?pág\. \d+/g, '').trim();
+  if (text.length < 200) throw new Error('No pude leer texto en ese archivo (¿es un PDF escaneado como imagen?)');
+  const st = saveSettings({ contract: text.slice(0, 60000), contractName: Buffer.from(req.file.originalname, 'latin1').toString('utf8') });
+  res.json({ ok: true, chars: st.contract.length, name: st.contractName });
+}));
 app.post('/api/ara/test-ruthina', guard, wrap(async (req, res) => res.json(await credito.probarRuthina(getSettings()))));
 app.post('/api/ara/test-market', guard, wrap(async (req, res) => {
   const autos = await market.autosMarket(getSettings(), { force: true });

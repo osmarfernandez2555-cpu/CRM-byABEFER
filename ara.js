@@ -103,6 +103,8 @@ const DEFAULTS = {
   horarios: { 0: '', 1: '09:00-18:00', 2: '09:00-18:00', 3: '09:00-18:00', 4: '09:00-18:00', 5: '09:00-18:00', 6: '09:00-13:00' },
   instructions: DEFAULT_INSTRUCTIONS,
   knowledge: DEFAULT_KNOWLEDGE,
+  contract: '',            // contrato de consignación (privado: solo para responder dudas y objeciones)
+  contractName: '',
   skills: DEFAULT_SKILLS.map(sk => ({ ...sk, enabled: true, builtin: true })),
 };
 
@@ -318,7 +320,11 @@ class Ara extends EventEmitter {
 
 === CONOCIMIENTO (única fuente de datos de stock, precios y condiciones) ===
 ${s.knowledge}
-
+${s.contract ? `
+=== CONTRATO DE CONSIGNACIÓN DE TUTU (CONFIDENCIAL: material interno de consulta) ===
+${s.contract}
+=== FIN DEL CONTRATO ===
+` : ''}
 ${habilidadesTexto(s.skills)}=== REGLAS FIJAS (tienen prioridad sobre todo lo anterior) ===
 - No inventes precios, stock, tasas, cuotas ni condiciones. Si algo no está en CONOCIMIENTO, decí que lo confirmás con un asesor y ofrecé una cita o usá derivar_a_humano.
 - Si no sabés qué quiere el cliente, preguntá simple: "¿Estás buscando comprar un auto o querés vender el tuyo?". Nunca ofrezcas "vender" y "dejar en consignación" como opciones separadas.
@@ -329,6 +335,8 @@ ${s.sendPhotos ? '- Si el cliente pide fotos o se interesa por una unidad concre
 - Nunca digas montos, cuotas, tasas ni nombres de bancos (ni los que aprobaron ni los que rechazaron). Si tiene crédito, decile: "¡Felicitaciones, [nombre]! Tenés crédito aprobado" y enseguida tratá de agendar la cita en el Polo 52, ofreciendo dos opciones concretas de día y horario.
 - Si NO califica: decíselo con tacto, sin culpas, y pedile el DNI de otra persona de su entorno (pareja, familiar) que pueda ser titular o garante; consultalo con calificar_credito con rol "segundo". Si ese tampoco califica, ofrecé otras opciones (contado, permuta) y una cita con un asesor.
 - Si la consulta queda pendiente, decile que lo estás consultando con los bancos y que le escribís en unos minutos. El sistema te avisa cuando llega el resultado. Nunca inventes un resultado.
+` : ''}${s.contract ? `- CONTRATO DE CONSIGNACIÓN (CONFIDENCIAL): usalo solo para entender las condiciones y responder dudas y objeciones con tus propias palabras, en lenguaje simple. NUNCA lo envíes, no lo copies ni lo cites textual, no menciones cláusulas ni números de cláusula, no digas "según el contrato" y no ofrezcas mandarlo. Si el cliente pide ver o recibir el contrato, decile que el asesor se lo muestra y se lo explica en la agencia antes de firmar.
+- Respondé siempre con la verdad y sin contradecir el contrato. Si el cliente pregunta por costos, plazos, exclusividad, retiro del auto o cómo y cuándo cobra, contestale lo que corresponda de forma clara y breve; no escondas una condición que pregunta directamente. Usá los beneficios (precio asegurado, alistamiento y fotos profesionales, publicación en la web, redes y portales, gestoría, poder seguir usando el auto mientras se vende) para responder objeciones y convencer.
 ` : ''}- Usá registrar_lead cada vez que el cliente te dé datos útiles (nombre, interés, presupuesto, usado, financiación).
 - Para agendar usá agendar_cita solo después de que el cliente confirme día y hora. Después de registrarla, confirmale día, hora y la dirección.
 ${s.mapsUrl ? `- UBICACIÓN: cuando confirmes una cita o el cliente pregunte dónde están o cómo llegar, mandale el link de Google Maps: ${s.mapsUrl}` : ''}
