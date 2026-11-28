@@ -11,6 +11,7 @@ import pino from 'pino';
 import QRCode from 'qrcode';
 import { q, DATA_DIR } from './db.js';
 import { toVoiceNote, toMp3, durationOf } from './media.js';
+import { subirFotoMarket } from './ruthina-sync.js';
 
 const logger = pino({ level: process.env.WA_LOG_LEVEL || 'warn' });
 const MAX_EAGER_BYTES = 16 * 1024 * 1024; // descarga automática de media hasta 16 MB
@@ -323,6 +324,10 @@ class WAManager extends EventEmitter {
     const file = `${sid}/${row.id.replace(/[^A-Za-z0-9_-]/g, '')}.${mime === 'audio/mpeg' ? 'mp3' : extFor(mime, row.file_name)}`;
     fs.writeFileSync(path.join(DATA_DIR, 'media', file), out);
     q.setMsgMedia.run(file, mime, sid, row.id);
+    // Foto de un cliente (chat 1 a 1, de los últimos 2 días): va al Tutu Market, que descarta lo que no sea un vehículo
+    if (row.type === 'image' && !row.from_me && row.jid?.endsWith('@s.whatsapp.net') && Date.now() / 1000 - (row.ts || 0) < 2 * 86400) {
+      subirFotoMarket(sid, row.jid, out, mime).catch(() => {});
+    }
     this.emit('media', { sessionId: sid, id: row.id, media_file: file, media_mime: mime });
     return { ...row, media_file: file, media_mime: mime };
   }

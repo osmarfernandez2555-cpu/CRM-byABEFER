@@ -8,6 +8,7 @@ import { DEFAULT_SKILLS, SKILL_TEXT_MAX, SKILL_FIXES } from './skills.js';
 import * as stock from './stock.js';
 import { pcmToWav, toMp3 } from './media.js';
 import * as credito from './credito.js';
+import * as ruthina from './ruthina-sync.js';
 export { DEFAULT_SKILLS };
 
 const TZ = 'America/Argentina/Cordoba';
@@ -227,6 +228,21 @@ const TOOLS = [
     },
   },
   {
+    name: 'cargar_consignacion',
+    description: 'Carga en el sistema el auto que el cliente quiere vender o dejar en consignación, para que un asesor lo evalúe y se publique en Tutu Market. Usala apenas tengas al menos modelo, año y kilómetros (marca y versión si las sabés). Podés volver a usarla si el cliente corrige un dato.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre: { type: 'string', description: 'Nombre del cliente' },
+        marca: { type: 'string' }, modelo: { type: 'string' }, version: { type: 'string' },
+        anio: { type: 'string' }, km: { type: 'string', description: 'Kilómetros' },
+        precio_pedido: { type: 'string', description: 'Precio que pretende el cliente, si lo dijo' },
+        estado_general: { type: 'string', description: 'Estado que cuenta el cliente (service, detalles, un solo dueño, etc.)' },
+      },
+      required: ['modelo'],
+    },
+  },
+  {
     name: 'derivar_a_humano',
     description: 'Pasa la conversación a un vendedor humano y ARA deja de responder en este chat. Usala si el cliente lo pide, está molesto, es un reclamo/postventa, o necesita información que no tenés.',
     input_schema: { type: 'object', properties: { motivo: { type: 'string' } }, required: ['motivo'] },
@@ -305,7 +321,8 @@ ${s.sendPhotos ? '- Si el cliente pide fotos o se interesa por una unidad concre
 ` : ''}- Usá registrar_lead cada vez que el cliente te dé datos útiles (nombre, interés, presupuesto, usado, financiación).
 - Para agendar usá agendar_cita solo después de que el cliente confirme día y hora. Después de registrarla, confirmale día, hora y la dirección.
 ${s.mapsUrl ? `- UBICACIÓN: cuando confirmes una cita o el cliente pregunte dónde están o cómo llegar, mandale el link de Google Maps: ${s.mapsUrl}` : ''}
-- NUNCA le pidas al cliente que traiga algo a la cita (título, cédula, 08, VTV, informe de dominio, DNI, recibos, llaves, ni ningún papel) ni que mande fotos o documentos antes. Solo tiene que venir. Si viene al caso, podés contarle la documentación como parte del proceso ("la transferencia y los papeles los vemos nosotros en la agencia"), pero sin pedirle nada.
+- NUNCA le pidas al cliente que traiga algo a la cita (título, cédula, 08, VTV, informe de dominio, DNI, recibos, llaves, ni ningún papel) ni que mande documentos. Solo tiene que venir. La ÚNICA excepción: si quiere vender o consignar su auto, sí podés pedirle fotos del VEHÍCULO (frente, costados, atrás, interior, tablero), nunca fotos de documentos ni de personas.
+- CONSIGNACIÓN / VENTA DE SU AUTO: apenas tengas modelo, año y kilómetros usá cargar_consignacion (no esperes a tener todo). Las fotos del auto que mande se publican solas en Tutu Market: no le prometas publicación, precio ni plazos; decile que un asesor lo evalúa y lo contacta. Si manda una foto que no es de un auto, no la comentes como si lo fuera. Si viene al caso, podés contarle la documentación como parte del proceso ("la transferencia y los papeles los vemos nosotros en la agencia"), pero sin pedirle nada.
 - Si te preguntan si sos un bot, una IA o una persona, respondé con la verdad: sos ARA, la asistente virtual de Tutu Automotores, y podés pasarlo con un asesor cuando quiera.
 - Formato WhatsApp: texto plano, sin markdown (nada de **, #, ni tablas). Máximo 3 mensajes cortos, separados por una línea en blanco. Emojis con moderación.
 - Si el último mensaje del cliente no necesita respuesta (por ejemplo un "ok" o un "gracias" después de despedirse), respondé exactamente: [SILENCIO]
@@ -676,6 +693,14 @@ ${(() => { const b = ctx.sid !== 'sim' ? q.getBot.get(ctx.sid, ctx.jid) : null; 
       this.emit('citas', {});
       return { ok: true, canceladas: n };
     }
+    if (name === 'cargar_consignacion') {
+      if (simulate) return { ok: true, simulado: true, mensaje: 'Auto cargado (simulación, no se guardó)' };
+      const r = await ruthina.cargarAutoAStock({ tel: ctx.telefono, nombre: input.nombre || ctx.nombreWa, marca: input.marca, modelo: input.modelo, version: input.version, anio: input.anio, km: input.km, precio: input.precio_pedido, estadoGeneral: input.estado_general });
+      if (!r.ok) return { ok: false, error: r.error, instruccion: 'No le avises nada al cliente de este error; seguí la charla y, si hace falta, derivá a un asesor para que cargue el auto.' };
+      q.upsertLead.run({ session_id: sid, jid, nombre: input.nombre || null, interes: 'consignacion', vehiculo_interes: null, presupuesto: null, usado_entrega: [input.marca, input.modelo, input.version, input.anio, input.km && input.km + ' km'].filter(Boolean).join(' '), financiacion: null, notas: null, updated_at: now() });
+      this.emit('lead', { session_id: sid, jid });
+      return { ok: true, mensaje: 'Auto cargado para evaluación', instruccion: 'Si todavía no mandó fotos, pedile fotos del auto (frente, costados, atrás, interior y tablero). Solo fotos del vehículo.' };
+    }
     if (name === 'registrar_lead') {
       if (simulate) return { ok: true, simulado: true };
       const f = (k) => (input[k] ? String(input[k]).slice(0, 500) : null);
@@ -684,6 +709,8 @@ ${(() => { const b = ctx.sid !== 'sim' ? q.getBot.get(ctx.sid, ctx.jid) : null; 
         presupuesto: f('presupuesto'), usado_entrega: f('usado_entrega'), financiacion: f('financiacion'), notas: f('notas'), updated_at: now(),
       });
       this.emit('lead', { session_id: sid, jid });
+      const L = q.getLead.get(sid, jid);
+      if (L && L.interes === 'compra') ruthina.enviarClienteCompra(sid, jid, L).catch(() => {});
       return { ok: true };
     }
     if (name === 'derivar_a_humano') {
